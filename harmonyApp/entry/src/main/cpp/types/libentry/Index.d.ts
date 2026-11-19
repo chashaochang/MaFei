@@ -28,6 +28,7 @@ export const UpdateOhosWindowChrome: (
 ) => void
 
 export const UpdateOhosPlayerState: (payload: string) => boolean
+export const UpdateOhosShortDramaState: (payload: string) => boolean
 
 export const SetOhosApplicationForeground: (foreground: boolean) => void
 

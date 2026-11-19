@@ -134,7 +134,7 @@ static napi_value UpdateWindowChrome(napi_env env, napi_callback_info info) {
     return result;
 }
 
-static napi_value UpdateStateJson(napi_env env, napi_callback_info info, bool web) {
+static napi_value UpdateStateJson(napi_env env, napi_callback_info info, libkn_KBoolean (*update)(void*)) {
     size_t count = 1;
     napi_value arguments[1];
     size_t payloadLength = 0;
@@ -156,7 +156,7 @@ static napi_value UpdateStateJson(napi_env env, napi_callback_info info, bool we
         napi_throw_type_error(env, nullptr, "Invalid player state JSON string");
         return nullptr;
     }
-    const bool accepted = web ? UpdateOhosWebState(payload.data()) : UpdateOhosPlayerState(payload.data());
+    const bool accepted = update(payload.data());
     if (!accepted) {
         OH_LOG_Print(
             LOG_APP,
@@ -182,8 +182,11 @@ static napi_value GetPlayerScreenVisible(napi_env env, napi_callback_info info) 
     return result;
 }
 
-static napi_value UpdatePlayerState(napi_env env, napi_callback_info info) { return UpdateStateJson(env, info, false); }
-static napi_value UpdateWebState(napi_env env, napi_callback_info info) { return UpdateStateJson(env, info, true); }
+static napi_value UpdatePlayerState(napi_env env, napi_callback_info info) { return UpdateStateJson(env, info, UpdateOhosPlayerState); }
+static napi_value UpdateWebState(napi_env env, napi_callback_info info) { return UpdateStateJson(env, info, UpdateOhosWebState); }
+static napi_value UpdateShortDramaState(napi_env env, napi_callback_info info) {
+    return UpdateStateJson(env, info, UpdateOhosShortDramaState);
+}
 
 static napi_value SetApplicationForeground(napi_env env, napi_callback_info info) {
     size_t count = 1;
@@ -385,6 +388,7 @@ static napi_value Init(napi_env env, napi_value exports) {
             nullptr,
         },
         { "UpdateOhosPlayerBackdrop", nullptr, UpdatePlayerBackdrop, nullptr, nullptr, nullptr, napi_default, nullptr },
+        { "UpdateOhosShortDramaState", nullptr, UpdateShortDramaState, nullptr, nullptr, nullptr, napi_default, nullptr },
         { "SetOhosApplicationForeground", nullptr, SetApplicationForeground, nullptr, nullptr, nullptr, napi_default, nullptr },
         {
             "IsOhosPlayerScreenVisible",

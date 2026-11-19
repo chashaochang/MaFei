@@ -69,7 +69,10 @@ fun IsOhosPlayerScreenVisible(): Boolean = ohosPlayerScreenVisible
 
 @OptIn(ExperimentalNativeApi::class)
 @CName("SetOhosApplicationForeground")
-fun SetOhosApplicationForeground(foreground: Boolean) = ProcessApplication.setForeground(foreground)
+fun SetOhosApplicationForeground(foreground: Boolean) {
+    OhosShortDramaHost.foreground = foreground
+    ProcessApplication.setForeground(foreground)
+}
 
 @OptIn(ExperimentalNativeApi::class)
 @CName("IsOhosPlayerFullscreenRequested")
@@ -276,6 +279,8 @@ fun MainArkUIViewController(
             cn.mafei.cmp.player.ui.LocalPlayerVideoBackdropSource provides ohosVideoBackdropSource,
             LocalPlayerContentReportSubmitter provides contentReportSubmitter,
             LocalPlayerWindowState provides ohosPlayerWindowState,
+            LocalShortDramaPlatform provides OhosShortDramaHost.platform,
+            LocalShortDramaForeground provides OhosShortDramaHost.foreground,
         ) {
             App(
                 runtime = runtime,

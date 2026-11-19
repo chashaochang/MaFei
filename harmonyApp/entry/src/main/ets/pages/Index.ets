@@ -2,6 +2,7 @@ import { ArkUIViewController, Compose, forwardHostKeyEvent } from '@cpf-kmp-cmp/
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import nativeApi from 'libentry.so';
 import { registerMaFeiPlayerInteropBuilder } from '../player/PlayerInterop';
+import { registerShortDramaSurface } from '../player/ShortDramaSurface';
 import { common } from '@kit.AbilityKit';
 import { registerEmbeddedWebInterop } from '../web/EmbeddedWebInterop';
 import { registerPhotoSaveInterop, releasePhotoSaveInterop } from '../media/PhotoSaveInterop';
@@ -40,6 +41,7 @@ struct Index {
       // Register the native video surface before CPF creates its ArkUIView
       // node. CMP owns the visible player UI and interaction layer.
       registerMaFeiPlayerInteropBuilder();
+      registerShortDramaSurface(context.applicationInfo.name.endsWith('.dev'));
       registerEmbeddedWebInterop();
       registerPhotoSaveInterop(context as common.UIAbilityContext);
       this.controller = nativeApi.MainArkUIViewController(

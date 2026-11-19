@@ -28,6 +28,40 @@ internal class BrowsePlayerState(
     var requestedBitrate by mutableStateOf<Int?>(null)
     var playerExpanded by mutableStateOf(false)
     var pendingSeekPosition by mutableStateOf<Long?>(null)
+    var shortDrama by mutableStateOf<ShortDramaRequest?>(null)
+        private set
+
+    fun startFromLibrary(item: MediaItem, libraryName: String?, shortDramaAvailable: Boolean) {
+        if (!shortDramaAvailable || !isShortDramaEntry(item, libraryName)) {
+            startPlaybackItem(item)
+            return
+        }
+        val runtime = playback ?: return
+        if (playbackBusy || shortDrama != null) return
+        playbackBusy = true
+        playbackError = null
+        val request = ShortDramaRequest(item, browser.playbackOptionsFor(item))
+        scope.launch {
+            try {
+                runtime.stop()
+                playingMedia = null
+                playQueue = null
+                playerExpanded = false
+                playerFullscreen = false
+                shortDrama = request
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                playbackError = "播放准备失败，请重试"
+            } finally {
+                playbackBusy = false
+            }
+        }
+    }
+
+    fun closeShortDrama() {
+        shortDrama = null
+    }
 
     fun startPlaybackItem(
         item: MediaItem,

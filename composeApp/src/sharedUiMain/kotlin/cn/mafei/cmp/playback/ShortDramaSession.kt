@@ -1,0 +1,173 @@
+package cn.mafei.cmp
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
+import cn.mafei.cmp.core.domain.MediaItem
+import cn.mafei.cmp.core.domain.MediaId
+import cn.mafei.cmp.core.domain.MediaType
+import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
+import cn.mafei.cmp.feature.detail.legacyPlaybackResumePositionMs
+import cn.mafei.cmp.player.api.PlayerPhase
+import cn.mafei.cmp.player.api.PlayerRuntime
+import cn.mafei.cmp.session.SessionPlaybackRuntime
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+internal class ShortDramaPlatform(
+    val createRuntime: () -> PlayerRuntime,
+    val surface: @Composable (PlayerRuntime, Modifier) -> Unit,
+    val setSelected: (PlayerRuntime, Boolean) -> Unit = { _, _ -> },
+)
+
+internal val LocalShortDramaPlatform = staticCompositionLocalOf<ShortDramaPlatform?> { null }
+internal val LocalShortDramaForeground = staticCompositionLocalOf { true }
+
+internal class ShortDramaRequest(val item: MediaItem, val options: PlaybackOptions)
+
+internal fun isShortDramaEntry(item: MediaItem, libraryName: String?): Boolean =
+    item.mediaType == MediaType.Episode && libraryName?.trim() == "短剧"
+
+internal fun shortDramaWindow(index: Int, episodeCount: Int): IntRange =
+    if (index in 0 until episodeCount) maxOf(0, index - 1)..minOf(episodeCount - 1, index + 1) else IntRange.EMPTY
+
+/** A retained page owns its native runtime and provider reporting generation. */
+internal class ShortDramaSession(
+    private val request: ShortDramaRequest,
+    private val scope: CoroutineScope,
+    private val platform: ShortDramaPlatform,
+    private val createPlayback: (PlayerRuntime) -> SessionPlaybackRuntime,
+) {
+    class Slot(val runtime: PlayerRuntime, val playback: SessionPlaybackRuntime) {
+        var preparation: Job? = null
+        val preparationFailed = mutableStateOf(false)
+    }
+
+    private val slots = mutableStateMapOf<MediaId, Slot>()
+    private val commands = Mutex()
+    private var active: MediaItem? = null
+    private var closed = false
+    private var foreground = true
+
+    fun slot(episode: MediaItem): Slot? = slots[episode.id]
+
+    suspend fun select(episodes: List<MediaItem>, index: Int) = commands.withLock {
+        val episode = episodes.getOrNull(index) ?: return@withLock
+        if (closed) return@withLock
+        val changed = active?.id != episode.id
+        if (changed) {
+            val previousSlot = active?.let(::slot)
+            previousSlot?.let { platform.setSelected(it.runtime, false) }
+            val previous = previousSlot?.playback?.controller
+            if (previous != null && previous.state.value.phase.acceptsPlaybackIntent()) previous.pause()
+        }
+        if (closed) return@withLock
+        val retained = shortDramaWindow(index, episodes.size).map { episodes[it] }
+        val retainedIds = retained.mapTo(mutableSetOf()) { it.id }
+        (slots.keys - retainedIds).forEach { id -> slots.remove(id)?.let(::retire) }
+        active = episode
+        val current = slot(episode)
+        if (current == null) {
+            create(episode)
+        } else if (changed && current.preparationFailed.value.not()) {
+            platform.setSelected(current.runtime, true)
+            when (current.playback.controller.state.value.phase) {
+                PlayerPhase.Ended -> prepare(current, episode, positionMs = 0)
+                PlayerPhase.Loading, PlayerPhase.Ready, PlayerPhase.Playing, PlayerPhase.Paused, PlayerPhase.Buffering ->
+                    current.playback.controller.play()
+                else -> Unit
+            }
+        } else if (changed) {
+            platform.setSelected(current.runtime, true)
+        }
+        retained.filter { !closed && slot(it) == null }.forEach { create(it) }
+    }
+
+    suspend fun setForeground(value: Boolean) = commands.withLock {
+        if (closed) return@withLock
+        foreground = value
+        for (slot in slots.values.toList()) {
+            if (closed) break
+            if (value) slot.playback.controller.foreground() else slot.playback.controller.background()
+        }
+    }
+
+    suspend fun toggle() = commands.withLock {
+        val episode = active ?: return@withLock
+        val slot = slot(episode) ?: return@withLock
+        val controller = slot.playback.controller
+        val state = controller.state.value
+        when {
+            slot.preparationFailed.value || state.phase == PlayerPhase.Error ->
+                prepare(slot, episode, positionMs = state.positionMs)
+            state.phase == PlayerPhase.Ended -> prepare(slot, episode, positionMs = 0)
+            state.phase == PlayerPhase.Playing || state.phase == PlayerPhase.Buffering -> controller.pause()
+            state.phase == PlayerPhase.Ready || state.phase == PlayerPhase.Paused -> controller.play()
+            else -> Unit
+        }
+    }
+
+    fun close() {
+        if (closed) return
+        closed = true
+        slots.values.forEach(::retire)
+        slots.clear()
+        active = null
+    }
+
+    private suspend fun create(episode: MediaItem) {
+        val runtime = platform.createRuntime()
+        platform.setSelected(runtime, active?.id == episode.id)
+        val slot = Slot(runtime, createPlayback(runtime))
+        slots[episode.id] = slot
+        if (!foreground) slot.playback.controller.background()
+        prepare(slot, episode, legacyPlaybackResumePositionMs(episode))
+    }
+
+    private fun prepare(slot: Slot, episode: MediaItem, positionMs: Long) {
+        slot.preparation?.cancel()
+        slot.preparationFailed.value = false
+        slot.preparation = scope.launch {
+            try {
+                // Selection can change during negotiation. Prepare paused,
+                // then honor current intent, not intent captured at request time.
+                val generation = slot.playback.play(
+                    itemId = episode.id,
+                    resumePositionMs = positionMs,
+                    autoplay = false,
+                    options = request.options.takeIf { episode.id == request.item.id } ?: PlaybackOptions(),
+                )
+                commands.withLock {
+                    if (closed || slot !== this@ShortDramaSession.slot(episode)) return@withLock
+                    slot.preparationFailed.value = generation == null
+                    val controller = slot.playback.controller
+                    if (generation != null && active?.id == episode.id && controller.state.value.phase.acceptsPlaybackIntent()) {
+                        controller.play()
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                slot.preparationFailed.value = true
+            }
+        }
+    }
+
+    private fun retire(slot: Slot) {
+        platform.setSelected(slot.runtime, false)
+        slot.preparation?.cancel()
+        scope.launch(NonCancellable) { slot.playback.release() }
+    }
+}
+
+private fun PlayerPhase.acceptsPlaybackIntent(): Boolean = when (this) {
+    PlayerPhase.Loading, PlayerPhase.Ready, PlayerPhase.Playing, PlayerPhase.Paused, PlayerPhase.Buffering -> true
+    else -> false
+}

@@ -121,6 +121,9 @@ internal fun BrowseApplication(
         remember(session) { { image -> runtime.loadPhotoArtwork(session, image) } }
     val playback = remember(session) { runtime.playback(session) }
     val player = remember(session) { BrowsePlayerState(playback, browser, scope) }
+    val shortDrama = player.shortDrama
+    val shortDramaPlatform = LocalShortDramaPlatform.current
+    val shortDramaVisible = shortDrama != null && shortDramaPlatform != null
     val playerWindow = LocalPlayerWindowState.current?.takeIf { it.accepts(player) }
     val separateVideoWindow = playerWindow != null && player.playingMedia?.mediaType != MediaType.Audio
     val playerShellState = rememberPlayerShellState(playback)
@@ -378,7 +381,7 @@ internal fun BrowseApplication(
         // handlers are registered deeper in the Navigation 3 tree and win
         // first; this handler only owns the root surface and route stacks.
         MaFeiBackHandler(
-            enabled = account.minePresented || browseCanGoBack,
+            enabled = !shortDramaVisible && (account.minePresented || browseCanGoBack),
             onBack = {
                 when {
                     account.minePresented && account.mineBackStack.size > 1 -> popMineRoute()
@@ -392,7 +395,33 @@ internal fun BrowseApplication(
         // 消费者绝不能在同一棵子树里（详见 N1 崩溃规则）。只在弹窗出现时挂捕获，平时零开销。
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().then(if (selection.pendingDeleteMedia != null) Modifier.captureGlassBackdrop(deleteConfirmBackdrop) else Modifier)) {
-                BrowsePlayerHost(
+                if (shortDrama != null && shortDramaPlatform != null) {
+                    BrowseShortDramaHost(
+                        request = shortDrama,
+                        platform = shortDramaPlatform,
+                        browser = browser,
+                        createPlayback = { engine ->
+                            SessionPlaybackRuntime.create(
+                                provider = session.selection.provider,
+                                adapter = session.binding.adapter,
+                                runtime = engine,
+                                scope = scope,
+                                nowMs = SystemEpochClock::nowEpochMs,
+                                onStopReported = { runtime.sessions.media.markPlaybackChanged(session.media) },
+                            )
+                        },
+                        onClose = player::closeShortDrama,
+                        onOpenRegular = { media, queue, position ->
+                            player.closeShortDrama()
+                            player.startPlaybackItem(
+                                item = media,
+                                queueOverride = queue,
+                                resumePositionMs = position.takeIf { it > 0 } ?: cn.mafei.cmp.feature.detail.legacyPlaybackResumePositionMs(media),
+                                optionsOverride = shortDrama.options.takeIf { shortDrama.item.id == media.id },
+                            )
+                        },
+                    )
+                } else BrowsePlayerHost(
                     player = player,
                     playerMedia = playerMedia,
                     preparedStream = preparedStream,
@@ -421,7 +450,7 @@ internal fun BrowseApplication(
                 // it. The system PiP window owns that surface until restoration; popping
                 // the player route here would dispose the native host and release the
                 // active playback session.
-                if (!player.playerExpanded || playerShellState.pictureInPicture || separateVideoWindow)
+                if (!shortDramaVisible && (!player.playerExpanded || playerShellState.pictureInPicture || separateVideoWindow))
                     browseContentStateHolder.SaveableStateProvider("browse-content") {
                         MaFeiAdaptiveShell(
                             layout = layout,

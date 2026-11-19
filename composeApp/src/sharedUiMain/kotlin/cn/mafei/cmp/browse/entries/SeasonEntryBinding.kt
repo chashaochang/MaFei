@@ -77,6 +77,7 @@ internal fun SeasonEntryBinding(
         // Display-profile episode rows may not carry canPlay, so filtering it
         // here leaves a visible but empty action capsule.
         val playTarget = state.selectedSeasonPlayTarget ?: state.detailEpisodes.firstOrNull()
+        val shortDramaAvailable = LocalShortDramaPlatform.current != null
         SeasonDetailScreen(
             series = series,
             season = season,
@@ -109,7 +110,9 @@ internal fun SeasonEntryBinding(
                         libraryId = route.libraryId,
                     )
             },
-            onPlayFirst = playTarget?.takeIf { playback != null }?.let { item -> { player.startPlayback(item) } },
+            onPlayFirst = playTarget?.takeIf { playback != null }?.let { item ->
+                { player.startFromLibrary(item, route.mediaName, shortDramaAvailable) }
+            },
             playTarget = playTarget,
             onTogglePlayed =
                 if (browser.capabilities.watchedEdit) {
