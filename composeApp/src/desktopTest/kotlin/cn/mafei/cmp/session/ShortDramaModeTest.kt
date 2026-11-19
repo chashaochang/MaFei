@@ -1,8 +1,15 @@
 package cn.mafei.cmp.session
 
+import cn.mafei.cmp.ShortDramaEntrance
 import cn.mafei.cmp.ShortDramaScrub
+import cn.mafei.cmp.core.domain.CollectionId
+import cn.mafei.cmp.core.domain.MediaCollection
+import cn.mafei.cmp.core.domain.MediaId
+import cn.mafei.cmp.core.domain.MediaItem
+import cn.mafei.cmp.core.domain.MediaType
+import cn.mafei.cmp.core.domain.ProviderKind
+import cn.mafei.cmp.core.domain.ServerId
 import cn.mafei.cmp.shortDramaEpisodeGroups
-import cn.mafei.cmp.shortDramaMode
 import cn.mafei.cmp.shortDramaSeekPosition
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -12,34 +19,43 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ShortDramaModeTest {
+    private val server = ServerId("fixture")
+    private val provider = ProviderKind.Feiniu
+    private val drama = MediaCollection(CollectionId("drama"), server, provider, "精选短剧（竖屏）")
+    private val regular = MediaCollection(CollectionId("tv"), server, provider, "电视剧")
+    private val series = MediaItem(MediaId("series"), server, provider, "Fixture Series", MediaType.Series)
+
     @Test
-    fun workOverrideWinsAndRememberedLibrarySurvivesRename() = runBlocking {
-        val preferences = ShortDramaPreferences(MemorySettings())
-        val scope = "server-a:viewer-a"
-        preferences.save(scope, library = true, "library-id", true)
-        preferences.save(scope, library = false, "work-id", false)
-        suspend fun mode() = shortDramaMode(
-            preferences.load(scope, library = false, "work-id"),
-            preferences.load(scope, library = true, "library-id"),
-            "已改名",
+    fun currentLibraryNameDeterminesModeIncludingAfterRename() = runBlocking {
+        var collections = listOf(drama, regular)
+        val entrance = ShortDramaEntrance(
+            collections = { collections },
+            loadItem = { error("Known libraries need no lookup") },
+            loadTarget = { _, _ -> null },
         )
-        assertFalse(mode())
-        preferences.save(scope, library = false, "work-id", null)
-        assertTrue(mode())
-        assertNull(preferences.load("server-a:viewer-b", library = true, "library-id"))
-        assertNull(preferences.load("server-b:viewer-a", library = true, "library-id"))
-        assertNull(preferences.load(scope, library = false, "library-id"))
+        assertTrue(entrance.matches(series, drama.id.value))
+        assertTrue(entrance.matches(series.copy(collectionId = drama.id), null))
+        assertFalse(entrance.matches(series, regular.id.value))
+        assertFalse(entrance.matches(series, "unknown"))
+        assertFalse(entrance.matches(series.copy(mediaType = MediaType.Audio), drama.id.value))
+        collections = listOf(drama.copy(name = "剧集合集"), regular)
+        assertFalse(entrance.matches(series, drama.id.value))
     }
 
     @Test
-    fun libraryNameMayContainShortDramaButExplicitModesTakePriority() {
-        assertTrue(shortDramaMode(null, null, " 短剧 "))
-        assertTrue(shortDramaMode(null, null, "精选短剧（竖屏）"))
-        assertFalse(shortDramaMode(null, null, "电视剧"))
-        assertFalse(shortDramaMode(null, null, null))
-        assertFalse(shortDramaMode(null, false, "精选短剧"))
-        assertFalse(shortDramaMode(false, true, "精选短剧"))
-        assertTrue(shortDramaMode(true, false, "电视剧"))
+    fun episodeOutsideLibraryViewInheritsSeriesLibrary() = runBlocking {
+        var seriesDetail = series.copy(parentId = MediaId(drama.id.value))
+        val entrance = ShortDramaEntrance(
+            collections = { listOf(drama, regular) },
+            loadItem = { id -> seriesDetail.also { assertEquals(it.id, id) } },
+            loadTarget = { _, _ -> null },
+        )
+        val episode = series.copy(id = MediaId("episode"), mediaType = MediaType.Episode, seriesId = series.id)
+        assertTrue(entrance.matches(episode, null))
+        seriesDetail = series.copy(collectionId = regular.id)
+        assertFalse(entrance.matches(episode, null))
+        seriesDetail = series
+        assertFalse(entrance.matches(episode, null))
     }
 
     @Test

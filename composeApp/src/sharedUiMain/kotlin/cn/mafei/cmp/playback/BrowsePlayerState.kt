@@ -3,7 +3,6 @@ package cn.mafei.cmp
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import cn.mafei.cmp.core.domain.MediaItem
-import cn.mafei.cmp.core.domain.MediaCollection
 import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.feature.detail.legacyPlaybackResumePositionMs
 import cn.mafei.cmp.feature.home.MediaBrowser
@@ -76,19 +75,6 @@ internal class BrowsePlayerState(
     }
 
     fun dismissShortDramaEntryFailure() { retryShortDramaEntry = null }
-
-    suspend fun shortDramaLibraryMode(collection: MediaCollection): Boolean =
-        shortDramaEntrance?.libraryMode(collection) ?: false
-
-    suspend fun shortDramaWorkMode(item: MediaItem): Boolean? = shortDramaEntrance?.workMode(item)
-
-    suspend fun setShortDramaLibrary(collection: MediaCollection, enabled: Boolean) {
-        shortDramaEntrance?.setLibrary(collection, enabled)
-    }
-
-    suspend fun setShortDramaWork(item: MediaItem, enabled: Boolean?) {
-        shortDramaEntrance?.setWork(item, enabled)
-    }
 
     fun playFromEntry(item: MediaItem, libraryId: String?) = openMedia(item, libraryId, { startPlaybackItem(item) })
 

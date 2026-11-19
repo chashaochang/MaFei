@@ -124,9 +124,11 @@ internal fun BrowseApplication(
     val shortDramaCapability by rememberUpdatedState(shortDramaPlatform != null)
     val player = remember(session) {
         val media = session.media
-        val entrance = ShortDramaEntrance(browser, runtime.shortDramaPreferences, "${media.serverId.value.length}:${media.serverId.value}${media.accountId.value}") { id ->
-            runtime.sessions.media.item(media, id).value
-        }
+        val entrance = ShortDramaEntrance(
+            collections = { browser.state.value.collections },
+            loadItem = { runtime.sessions.media.item(media, it).value },
+            loadTarget = browser::shortDramaTarget,
+        )
         BrowsePlayerState(playback, browser, scope, entrance) { shortDramaCapability }
     }
     val shortDrama = player.shortDrama

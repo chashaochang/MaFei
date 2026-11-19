@@ -92,7 +92,6 @@ class ApplicationRuntime(
     private val artwork = SessionArtwork(transport)
 
     private val preferences = RuntimePreferences(settings, appearance, { isClosed }, failureReporter)
-    internal val shortDramaPreferences = ShortDramaPreferences(settings)
     private val playbackRegistry = ApplicationPlaybackRegistry(
         sessions, scope, transport, playerRuntimeFactory, playerPreferences, externalSubtitleOverlay, { isClosed },
     )

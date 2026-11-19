@@ -3,8 +3,6 @@ package cn.mafei.cmp.session
 import cn.mafei.cmp.ShortDramaPlatform
 import cn.mafei.cmp.ShortDramaRequest
 import cn.mafei.cmp.ShortDramaSession
-import cn.mafei.cmp.shortDramaMode
-import cn.mafei.cmp.supportsShortDrama
 import cn.mafei.cmp.core.domain.ClientConfigError
 import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.MediaItem
@@ -176,14 +174,6 @@ class ShortDramaSessionTest {
             session.close()
             scope.cancel()
         }
-    }
-
-    @Test
-    fun normalVideoDoesNotRouteToShortDrama() {
-        assertTrue(episodes.first().supportsShortDrama)
-        assertTrue(episodes.first().copy(mediaType = MediaType.Movie).supportsShortDrama)
-        assertFalse(episodes.first().copy(mediaType = MediaType.Audio).supportsShortDrama)
-        assertFalse(shortDramaMode(null, null, "影视"))
     }
 
     @Test
