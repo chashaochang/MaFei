@@ -14,9 +14,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
@@ -65,6 +68,8 @@ internal fun BrowseShortDramaHost(
     val foreground = LocalShortDramaForeground.current
     var queue by remember(request) { mutableStateOf(PlaybackQueue.forItem(request.item, emptyList())) }
     var episodesOpen by remember(request) { mutableStateOf(false) }
+    var speedOpen by remember(request) { mutableStateOf(false) }
+    var chromeHeight by remember(request) { mutableIntStateOf(0) }
     var fullscreen by remember(request) { mutableStateOf(false) }
     var showFullscreenControls by remember(request) { mutableStateOf(true) }
     var scrubbing by remember(request) { mutableStateOf(false) }
@@ -139,12 +144,14 @@ internal fun BrowseShortDramaHost(
     }
     fun openDetails() {
         episodesOpen = false
+        speedOpen = false
         detailsOpen = true
         scope.launch { drama.openDetails() }
     }
     val back: () -> Unit = {
         when {
             detailsOpen -> closeDetails(false)
+            speedOpen -> speedOpen = false
             episodesOpen -> episodesOpen = false
             fullscreen -> setFullscreen(false)
             else -> onClose()
@@ -166,6 +173,7 @@ internal fun BrowseShortDramaHost(
         val settledState = settledSlot?.playback?.controller?.state?.collectAsState()?.value ?: PlayerState()
         val settledPhase = settledState.phase
         val workTitle = work?.title ?: episode.seriesTitle ?: episode.title
+        val synopsis = shortDramaSynopsis(work?.overview, episode.overview ?: request.item.overview)
         val video = episode.mediaSources.firstNotNullOfOrNull { it.videoStream }
         val runtimeInfo = settledState.runtimeInfo
         val rotation = (video?.rotation ?: 0) % 180 != 0
@@ -187,7 +195,10 @@ internal fun BrowseShortDramaHost(
             ?: if (episode.seriesId != null) "第 ${settled + 1} 集" else null
         val captionVisible = !detailsOpen && !episodesOpen && (!fullscreen || showFullscreenControls || scrubbing)
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            val normalBottom = if (loaded.size > 1 || queueFailed) 156.dp else 108.dp
+            val normalBottom = maxOf(
+                if (loaded.size > 1 || queueFailed) 156.dp else 108.dp,
+                with(LocalDensity.current) { chromeHeight.toDp() } + 18.dp,
+            )
             val panelHeight = (maxHeight * .5f).coerceAtLeast(insets.bottom + 218.dp)
                 .coerceAtMost(maxHeight * .82f)
             val videoTop = if (fullscreen) 0.dp else insets.top + if (episodesOpen) 8.dp else 52.dp
@@ -203,7 +214,7 @@ internal fun BrowseShortDramaHost(
                 // The pager can remeasure before this scope recomposes. Read
                 // live keys, just like pageCount, rather than capturing loaded.
                 key = { queue.items.getOrNull(it)?.id?.value ?: it },
-                userScrollEnabled = loaded.size > 1 && !scrubbing && !fullscreen && !episodesOpen && !detailsOpen,
+                userScrollEnabled = loaded.size > 1 && !scrubbing && !fullscreen && !episodesOpen && !detailsOpen && !speedOpen,
             ) { index ->
                 val pageQueue = queue
                 val page = pageQueue.items.getOrNull(index) ?: return@VerticalPager
@@ -303,14 +314,23 @@ internal fun BrowseShortDramaHost(
                             ChromeGlyph(PlayerChromeGlyph.Fullscreen, Modifier.size(20.dp))
                         }
                     }
-                    if (!fullscreen) toggleFavorite?.let {
-                        ShortDramaIcon(MaFeiGlyph.Favorite, if (favorite) "取消收藏" else "收藏", Modifier, favorite, it)
+                    if (settledSlot?.runtime?.capabilities?.speed == true) {
+                        Row(
+                            Modifier.height(48.dp).widthIn(min = 48.dp)
+                                .clickable(onClickLabel = "播放倍速", role = Role.Button) { speedOpen = !speedOpen }
+                                .padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                        ) {
+                            MaFeiIcon(MaFeiGlyph.Clock, Modifier.size(20.dp), color = Color.White)
+                            Text(shortDramaSpeedLabel(drama.speed), color = Color.White, fontSize = 15.sp)
+                        }
                     }
                 }
                 key(episode.id) {
                     ShortDramaPlaybackChrome(
                         title = workTitle,
-                        synopsis = episode.overview ?: work?.overview,
+                        synopsis = synopsis,
                         position = settledState.positionMs,
                         duration = settledState.durationMs,
                         selectionLabel = if (!fullscreen && queueComplete && loaded.size > 1) "选集 · 共 ${loaded.size} 集"
@@ -324,9 +344,23 @@ internal fun BrowseShortDramaHost(
                                 ?: settledSlot?.playback?.previewFrame(time)
                         },
                         modifier = Modifier.align(Alignment.BottomCenter)
-                            .padding(start = insets.start, end = insets.end, bottom = insets.bottom + 12.dp),
+                            .padding(start = insets.start, end = insets.end, bottom = insets.bottom + 12.dp)
+                            .onSizeChanged { if (!scrubbing && !fullscreen) chromeHeight = it.height },
                         fullscreen = fullscreen,
+                        synopsisMaxHeight = (maxHeight * .23f).coerceIn(48.dp, 140.dp),
                     )
+                }
+            }
+            if (speedOpen) {
+                Box(Modifier.fillMaxSize().clickable(null, null, onClickLabel = "关闭倍速") { speedOpen = false })
+                Box(
+                    Modifier.align(Alignment.TopCenter).widthIn(max = 660.dp).fillMaxWidth()
+                        .padding(end = insets.end + 14.dp, top = insets.top + 56.dp),
+                ) {
+                    ShortDramaSpeedMenu(drama.speed, Modifier.align(Alignment.TopEnd)) { speed ->
+                        speedOpen = false
+                        scope.launch { drama.setSpeed(speed) }
+                    }
                 }
             }
             if (episodesOpen) {
@@ -345,10 +379,43 @@ internal fun BrowseShortDramaHost(
             if (detailsOpen) {
                 ShortDramaDetail(
                     item = work ?: request.item, title = workTitle,
-                    episodeCount = loaded.size.takeIf { queueComplete && it > 1 }, loadArtwork = loadArtwork,
+                    episodeCount = loaded.size.takeIf { queueComplete && it > 1 },
+                    synopsis = synopsis, episodes = loaded.items, currentIndex = settled,
+                    loadingFailed = queueFailed, onRetry = { queueAttempt++ },
+                    onPick = { index ->
+                        scope.launch {
+                            if (index != settled) {
+                                pager.scrollToPage(index)
+                                drama.select(loaded.items, index)
+                            }
+                            drama.closeDetails(play = true)
+                            detailsOpen = false
+                        }
+                    },
+                    loadArtwork = loadArtwork,
                     favorite = favorite, onFavorite = toggleFavorite, onBack = { closeDetails(false) },
                     onContinue = { closeDetails(true) },
                 )
+            }
+        }
+    }
+}
+
+private fun shortDramaSpeedLabel(speed: Float): String = "${speed.toString().removeSuffix(".0")}×"
+
+@Composable
+private fun ShortDramaSpeedMenu(speed: Float, modifier: Modifier, onPick: (Float) -> Unit) {
+    Column(modifier.width(116.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+        .background(Color(0xFF242426)).padding(vertical = 4.dp)) {
+        for (value in listOf(.75f, 1f, 1.25f, 1.5f, 2f, 3f)) {
+            val active = speed == value
+            Box(
+                Modifier.fillMaxWidth().heightIn(min = 44.dp).semantics { selected = active }
+                    .clickable(role = Role.Button) { onPick(value) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(shortDramaSpeedLabel(value), color = if (active) Color(0xFFFFC58B) else Color.White,
+                    fontSize = 15.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
             }
         }
     }

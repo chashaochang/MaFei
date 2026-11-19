@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -22,8 +25,12 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiIcon
@@ -36,6 +43,9 @@ import kotlin.math.roundToLong
 
 internal fun shortDramaSeekPosition(fraction: Float, duration: Long): Long =
     (fraction.coerceIn(0f, 1f).toDouble() * duration.coerceAtLeast(0L)).roundToLong()
+
+internal fun shortDramaSynopsis(work: String?, episode: String?): String? =
+    sequenceOf(work, episode).mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }.firstOrNull()
 
 internal class ShortDramaScrub {
     var target by mutableStateOf<Long?>(null)
@@ -60,6 +70,7 @@ internal fun ShortDramaPlaybackChrome(
     loadPreview: suspend (Long) -> PlayerSeekPreviewFrame?,
     modifier: Modifier = Modifier,
     fullscreen: Boolean = false,
+    synopsisMaxHeight: Dp = 140.dp,
 ) {
     val total = duration?.takeIf { it > 0L }
     val scrub = remember { ShortDramaScrub() }
@@ -115,8 +126,12 @@ internal fun ShortDramaPlaybackChrome(
                     modifier = Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (onDetails != null) MaFeiIcon(MaFeiGlyph.Chevron, color = Color.White)
             }
-            Text(synopsis.orEmpty(), Modifier.height(23.dp), color = Color(0xFFBBBCC1),
-                fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            synopsis?.let {
+                ShortDramaSynopsis(
+                    it, TextStyle(color = Color(0xFFBBBCC1), fontSize = 13.sp, lineHeight = 19.sp),
+                    expandedMaxHeight = synopsisMaxHeight,
+                )
+            }
         }
         // This hit region stays mounted while the track and controls above it change.
         Box(
@@ -173,5 +188,48 @@ internal fun ShortDramaPlaybackChrome(
                 MaFeiIcon(MaFeiGlyph.Chevron, Modifier.rotate(-90f), color = Color.White)
             }
         }
+    }
+}
+
+@Composable
+internal fun ShortDramaSynopsis(text: String, style: TextStyle, expandedMaxHeight: Dp = Dp.Unspecified) {
+    var expanded by remember(text) { mutableStateOf(false) }
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val width = with(LocalDensity.current) { maxWidth.roundToPx() }.coerceAtLeast(1)
+        val truncated = remember(text, style, width, measurer) {
+            measurer.measure(text, style, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                constraints = Constraints(maxWidth = width)).hasVisualOverflow
+        }
+        Column {
+            val showAll = expanded && truncated
+            Row(verticalAlignment = Alignment.Bottom) {
+                val body = if (showAll && expandedMaxHeight != Dp.Unspecified) {
+                    Modifier.heightIn(max = expandedMaxHeight).verticalScroll(rememberScrollState())
+                } else Modifier
+                Text(
+                    text, Modifier.weight(1f).then(body), style = style,
+                    maxLines = if (showAll) Int.MAX_VALUE else 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (truncated && !showAll) {
+                    ShortDramaSynopsisAction("展开", Modifier.padding(start = 8.dp)) { expanded = true }
+                }
+            }
+            if (showAll) {
+                ShortDramaSynopsisAction("收起", Modifier.align(Alignment.End)) { expanded = false }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShortDramaSynopsisAction(label: String, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier.sizeIn(minWidth = 44.dp, minHeight = 36.dp)
+            .clickable(role = Role.Button, onClick = onClick).padding(bottom = 2.dp),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Text(label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }

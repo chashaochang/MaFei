@@ -14,6 +14,8 @@ interface DramaSurfaceSize {
 interface DramaLoadOptions {
   startPositionMs: number;
   playWhenReady: boolean;
+  httpHeaders: string[];
+  allowInsecureTls: boolean;
 }
 
 export interface DramaPlayer {
@@ -22,10 +24,12 @@ export interface DramaPlayer {
   play(): boolean;
   pause(): boolean;
   seekTo(positionMs: number): boolean;
+  setPlaybackSpeed?(speed: number): boolean;
   stop(): void;
   release(): void;
   snapshot(): DramaSnapshot | undefined;
 }
 
 export function hasShortDramaSdk(): boolean;
+export function hasShortDramaAdvancedSource(): boolean;
 export function createShortDramaPlayer(): DramaPlayer;

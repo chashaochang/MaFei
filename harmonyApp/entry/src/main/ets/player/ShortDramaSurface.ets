@@ -1,15 +1,18 @@
 import { registerComposeInteropBuilder } from '@cpf-kmp-cmp/compose/src/main/ets/compose/ArkUIView';
 import nativeApi from 'libentry.so';
-import { createShortDramaPlayer, DramaPlayer, hasShortDramaSdk } from './ShortDramaSdk';
+import { createShortDramaPlayer, DramaPlayer, hasShortDramaAdvancedSource, hasShortDramaSdk } from './ShortDramaSdk';
 
 interface DramaArgs {
   slotId: number;
   loadId: number;
   url: string;
+  httpHeaders: string;
+  allowInsecureTls: boolean;
   startPositionMs: number;
   playRevision: number;
   seekRevision: number;
   seekPositionMs: number;
+  speed: number;
 }
 
 class DramaXComponent extends XComponentController {
@@ -34,7 +37,9 @@ function shortDramaBuilder(_args: Object): void {
 export function registerShortDramaSurface(development: boolean): void {
   if (!development || !hasShortDramaSdk()) return;
   registerComposeInteropBuilder('MaFeiShortDramaSurface', shortDramaBuilder);
-  nativeApi.UpdateOhosShortDramaState('{"available":true}');
+  nativeApi.UpdateOhosShortDramaState(JSON.stringify({
+    available: true, advancedSource: hasShortDramaAdvancedSource()
+  }));
 }
 
 @Component
@@ -49,6 +54,7 @@ struct ShortDramaSurface {
   private opened: boolean = false;
   private loadId: number = 0;
   private seekRevision: number = 0;
+  private speed: number = 1;
   private failed: boolean = false;
   private positionMs: number = 0;
   private firstFrame: boolean = false;
@@ -90,6 +96,7 @@ struct ShortDramaSurface {
     this.opened = false;
     this.phase = '';
     this.firstFrame = false;
+    this.speed = 1;
   }
 
   private yieldPlayback(): void {
@@ -114,12 +121,19 @@ struct ShortDramaSurface {
     if (!this.opened) {
       this.opened = player.load(this.args.url, {
         id: this.surfaceId, width: this.widthPx, height: this.heightPx
-      }, { startPositionMs: this.positionMs, playWhenReady: false });
+      }, {
+        startPositionMs: this.positionMs, playWhenReady: false,
+        httpHeaders: JSON.parse(this.args.httpHeaders) as string[],
+        allowInsecureTls: this.args.allowInsecureTls
+      });
       if (!this.opened) {
         this.failed = true;
         this.emit('error', 0, false);
         return;
       }
+    }
+    if (this.args.speed !== this.speed && player.setPlaybackSpeed?.(this.args.speed)) {
+      this.speed = this.args.speed;
     }
     if (this.args.seekRevision > this.seekRevision) {
       this.seekRevision = this.args.seekRevision;

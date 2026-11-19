@@ -208,6 +208,56 @@ class ShortDramaSessionTest {
         }
     }
 
+    @Test
+    fun pickingAnEpisodeFromDetailsDoesNotRestartTheCoveredEpisode() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined + Job())
+        val session = buildSession(scope)
+        try {
+            session.select(episodes, 0)
+            val previous = engine(session, 0)
+            val next = engine(session, 1)
+            previous.emitReady(previous.generation())
+            previous.emitPlaying(previous.generation())
+            next.emitReady(next.generation())
+            session.openDetails()
+            previous.emitPaused(previous.generation())
+            session.select(episodes, 1)
+            assertFalse(next.commands.any { it is RuntimeCommand.Play })
+            session.closeDetails(play = true)
+            assertTrue(next.commands.last() is RuntimeCommand.Play)
+            assertEquals(1, previous.commands.count { it is RuntimeCommand.Play })
+            assertEquals(1, next.commands.count { it is RuntimeCommand.Load })
+        } finally {
+            session.close()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun chosenSpeedAppliesToReadyAndNewlyPreparedEpisodes() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined + Job())
+        val session = buildSession(scope)
+        try {
+            session.select(episodes, 0)
+            val current = engine(session, 0)
+            val next = engine(session, 1)
+            current.emitReady(current.generation())
+            session.setSpeed(1.5f)
+            assertEquals(1.5f, current.commands.filterIsInstance<RuntimeCommand.Speed>().single().value)
+            assertTrue(next.commands.none { it is RuntimeCommand.Speed })
+            next.emitReady(next.generation())
+            assertEquals(1.5f, next.commands.filterIsInstance<RuntimeCommand.Speed>().single().value)
+
+            session.select(episodes, 1)
+            val newlyRetained = engine(session, 2)
+            newlyRetained.emitReady(newlyRetained.generation())
+            assertEquals(1.5f, newlyRetained.commands.filterIsInstance<RuntimeCommand.Speed>().single().value)
+        } finally {
+            session.close()
+            scope.cancel()
+        }
+    }
+
     private fun buildSession(scope: CoroutineScope): ShortDramaSession = ShortDramaSession(
         ShortDramaRequest(episodes[1], PlaybackOptions()),
         scope,

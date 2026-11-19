@@ -6,6 +6,10 @@ export function hasShortDramaSdk() {
   return typeof mfplayer.MultiInstancePlayer === 'function';
 }
 
+export function hasShortDramaAdvancedSource() {
+  return hasShortDramaSdk() && typeof mfplayer.MultiInstancePlayer.prototype.setPlaybackSpeed === 'function';
+}
+
 export function createShortDramaPlayer() {
   return new mfplayer.MultiInstancePlayer();
 }

@@ -38,7 +38,7 @@ internal object OhosShortDramaHost {
         val event = runCatching { Json.decodeFromString<ShortDramaEvent>(raw) }.getOrNull() ?: return false
         if (event.available) {
             platform = ShortDramaPlatform(
-                createRuntime = { OhosShortDramaRuntime(++lastId) },
+                createRuntime = { OhosShortDramaRuntime(++lastId, event.advancedSource) },
                 surface = { runtime, modifier -> Surface(runtime as OhosShortDramaRuntime, modifier) },
                 setSelected = { runtime, selected -> (runtime as OhosShortDramaRuntime).setSelected(selected) },
             )
@@ -62,10 +62,13 @@ internal object OhosShortDramaHost {
                 "slotId"(runtime.slotId.nApiValue())
                 "loadId"(intent.loadId.nApiValue())
                 "url"(intent.url.nApiValue())
+                "httpHeaders"(intent.httpHeaders.nApiValue())
+                "allowInsecureTls"(intent.allowInsecureTls.nApiValue())
                 "startPositionMs"(intent.startMs.toDouble().nApiValue())
                 "playRevision"(intent.playRevision.nApiValue())
                 "seekRevision"(intent.seekRevision.nApiValue())
                 "seekPositionMs"(intent.seekMs.toDouble().nApiValue())
+                "speed"(intent.speed.toDouble().nApiValue())
             },
             background = Color.Black,
             interactive = false,
@@ -80,6 +83,7 @@ fun UpdateOhosShortDramaState(payload: CPointer<ByteVar>?): Boolean =
 @Serializable
 private data class ShortDramaEvent(
     val available: Boolean = false,
+    val advancedSource: Boolean = false,
     val slotId: Int = 0,
     val loadId: Int = 0,
     val phase: String = "",
@@ -91,14 +95,17 @@ private data class ShortDramaEvent(
 private data class ShortDramaIntent(
     val loadId: Int = 0,
     val url: String = "",
+    val httpHeaders: String = "[]",
+    val allowInsecureTls: Boolean = false,
     val startMs: Long = 0,
     val playRevision: Int = 0,
     val seekRevision: Int = 0,
     val seekMs: Long = 0,
+    val speed: Float = 1f,
 )
 
-private class OhosShortDramaRuntime(val slotId: Int) : PlayerRuntime {
-    override val capabilities = PlayerCapabilities(speed = false, trackSelection = false)
+private class OhosShortDramaRuntime(val slotId: Int, private val advancedSource: Boolean) : PlayerRuntime {
+    override val capabilities = PlayerCapabilities(speed = advancedSource, trackSelection = false)
     private var generation: PlaybackGeneration? = null
     private var eventSink: ((RuntimeEvent) -> Unit)? = null
     private var ready = false
@@ -124,13 +131,18 @@ private class OhosShortDramaRuntime(val slotId: Int) : PlayerRuntime {
                 ready = false
                 phase = ""
                 intent = ShortDramaIntent(loadId = intent.loadId + 1)
-                if (stream.headers.isNotEmpty() || stream.allowInsecureTls || stream.audioOnly ||
+                if ((!advancedSource && (stream.headers.isNotEmpty() || stream.allowInsecureTls)) || stream.audioOnly ||
                     stream.subtitleUrl != null || stream.url.endsWith("#bdiso") ||
                     !stream.url.startsWith("http://") && !stream.url.startsWith("https://")
                 ) {
                     eventSink?.invoke(RuntimeEvent.Failed(command.generation, PlayerFailure.UnsupportedMedia))
                 } else {
-                    intent = intent.copy(url = stream.url, startMs = command.startPositionMs)
+                    intent = intent.copy(
+                        url = stream.url,
+                        httpHeaders = Json.encodeToString(stream.headers.map { (key, value) -> "$key: $value" }),
+                        allowInsecureTls = stream.allowInsecureTls,
+                        startMs = command.startPositionMs,
+                    )
                 }
             }
             is RuntimeCommand.Play -> if (selected && generation === command.generation) {
@@ -141,6 +153,9 @@ private class OhosShortDramaRuntime(val slotId: Int) : PlayerRuntime {
             }
             is RuntimeCommand.Seek -> if (generation === command.generation) {
                 intent = intent.copy(seekRevision = intent.seekRevision + 1, seekMs = command.positionMs)
+            }
+            is RuntimeCommand.Speed -> if (generation === command.generation && capabilities.speed) {
+                intent = intent.copy(speed = command.value)
             }
             is RuntimeCommand.Stop -> if (generation === command.generation) reset()
             RuntimeCommand.Release -> {

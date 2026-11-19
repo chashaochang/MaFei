@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
@@ -67,20 +68,6 @@ internal fun ShortDramaEpisodePanel(
 ) {
     val insets = currentMaFeiSafeArea()
     val poster = shortDramaPoster(work, loadArtwork)
-    val seasons = remember(items) { items.indices.groupBy { items[it].seasonId?.value ?: items[it].seasonNumber } }
-    val seasonKeys = seasons.keys.toList()
-    val initialSeason = seasons.keys.indexOfFirst { currentIndex in seasons.getValue(it) }.coerceAtLeast(0)
-    var season by remember { mutableIntStateOf(initialSeason) }
-    val seasonItems = seasons[seasonKeys.getOrNull(season)] ?: items.indices.toList()
-    val groups = shortDramaEpisodeGroups(seasonItems.size)
-    val firstPage = (seasonItems.indexOf(currentIndex).coerceAtLeast(0) / EpisodesPerGroup)
-    var group by remember { mutableIntStateOf(firstPage) }
-    val visible = groups.getOrNull(group) ?: groups.firstOrNull() ?: IntRange.EMPTY
-    val listState = rememberLazyGridState()
-    val selectedPosition = seasonItems.indexOf(currentIndex) - visible.first
-    LaunchedEffect(season, group) {
-        listState.scrollToItem(selectedPosition.takeIf { it in 0 until visible.count() } ?: 0)
-    }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compact = maxHeight < 480.dp
         Box(Modifier.fillMaxSize().clickable(remember { MutableInteractionSource() }, null, onClickLabel = "关闭选集", onClick = onClose))
@@ -104,12 +91,46 @@ internal fun ShortDramaEpisodePanel(
                 }
                 onFavorite?.let { ShortDramaIcon(MaFeiGlyph.Favorite, if (favorite) "取消收藏" else "收藏", Modifier, favorite, it) }
             }
-            if (!compact || loadingFailed) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 38.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("选集", Modifier.weight(1f), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    if (loadingFailed) ShortDramaCommand("重试", onClick = onRetry)
-                }
+            ShortDramaEpisodePicker(
+                items, currentIndex, loadingFailed, onRetry, onPick,
+                modifier = Modifier.weight(1f), showTitle = !compact,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShortDramaEpisodePicker(
+    items: List<MediaItem>,
+    currentIndex: Int,
+    loadingFailed: Boolean,
+    onRetry: () -> Unit,
+    onPick: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    showTitle: Boolean = true,
+    boundedGrid: Boolean = false,
+) {
+    val seasons = remember(items) { items.indices.groupBy { items[it].seasonId?.value ?: items[it].seasonNumber } }
+    val seasonKeys = seasons.keys.toList()
+    val initialSeason = seasons.keys.indexOfFirst { currentIndex in seasons.getValue(it) }.coerceAtLeast(0)
+    var season by remember(items) { mutableIntStateOf(initialSeason) }
+    val seasonItems = seasons[seasonKeys.getOrNull(season)] ?: items.indices.toList()
+    val groups = shortDramaEpisodeGroups(seasonItems.size)
+    val firstPage = (seasonItems.indexOf(currentIndex).coerceAtLeast(0) / EpisodesPerGroup)
+    var group by remember(items) { mutableIntStateOf(firstPage) }
+    val visible = groups.getOrNull(group) ?: groups.firstOrNull() ?: IntRange.EMPTY
+    val listState = rememberLazyGridState()
+    val selectedPosition = seasonItems.indexOf(currentIndex) - visible.first
+    LaunchedEffect(items, season, group) {
+        listState.scrollToItem(selectedPosition.takeIf { it in 0 until visible.count() } ?: 0)
+    }
+    Column(modifier.fillMaxWidth()) {
+        if (showTitle || loadingFailed) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 38.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("选集", Modifier.weight(1f), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                if (loadingFailed) ShortDramaCommand("重试", onClick = onRetry)
             }
+        }
             if (seasonKeys.size > 1) {
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
                     seasonKeys.forEachIndexed { index, key ->
@@ -135,7 +156,8 @@ internal fun ShortDramaEpisodePanel(
             }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(48.dp), state = listState,
-                modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = if (boundedGrid) Modifier.heightIn(max = 300.dp) else Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 12.dp),
             ) {
                 items(visible.map { seasonItems[it] }, key = { items[it].id.value }) { index ->
@@ -151,7 +173,6 @@ internal fun ShortDramaEpisodePanel(
                     }
                 }
             }
-        }
     }
 }
 
@@ -169,6 +190,12 @@ internal fun ShortDramaDetail(
     item: MediaItem,
     title: String,
     episodeCount: Int?,
+    synopsis: String?,
+    episodes: List<MediaItem>,
+    currentIndex: Int,
+    loadingFailed: Boolean,
+    onRetry: () -> Unit,
+    onPick: (Int) -> Unit,
     loadArtwork: suspend (MediaImage, Int) -> ByteArray?,
     favorite: Boolean,
     onFavorite: (() -> Unit)?,
@@ -201,19 +228,15 @@ internal fun ShortDramaDetail(
                         if (item.genres.isNotEmpty()) Text(item.genres.take(4).joinToString(" · "), color = Color(0xFFCBCBD0), fontSize = 14.sp)
                     }
                 }
-                item.overview?.takeIf(String::isNotBlank)?.let { overview ->
-                    var expanded by remember(item.id) { mutableStateOf(false) }
-                    var truncated by remember(item.id) { mutableStateOf(false) }
+                synopsis?.let { overview ->
                     Spacer(Modifier.height(25.dp))
                     Text("剧情简介", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                    Text(overview, Modifier.padding(top = 9.dp), color = Color(0xFFD5D5D9), fontSize = 15.sp,
-                        lineHeight = 23.sp, maxLines = if (expanded) Int.MAX_VALUE else 3,
-                        overflow = TextOverflow.Ellipsis, onTextLayout = { if (!expanded) truncated = it.hasVisualOverflow })
-                    if (truncated || expanded) {
-                        Text(if (expanded) "收起" else "展开",
-                            Modifier.clickable(role = Role.Button) { expanded = !expanded }.padding(vertical = 11.dp),
-                            color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    }
+                    Spacer(Modifier.height(9.dp))
+                    ShortDramaSynopsis(overview, TextStyle(color = Color(0xFFD5D5D9), fontSize = 15.sp, lineHeight = 23.sp))
+                }
+                if (episodes.size > 1 || loadingFailed) {
+                    Spacer(Modifier.height(20.dp))
+                    ShortDramaEpisodePicker(episodes, currentIndex, loadingFailed, onRetry, onPick, boundedGrid = true)
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

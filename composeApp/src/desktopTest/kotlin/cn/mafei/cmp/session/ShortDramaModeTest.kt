@@ -11,6 +11,7 @@ import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.domain.ServerId
 import cn.mafei.cmp.shortDramaEpisodeGroups
 import cn.mafei.cmp.shortDramaSeekPosition
+import cn.mafei.cmp.shortDramaSynopsis
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,6 +25,13 @@ class ShortDramaModeTest {
     private val drama = MediaCollection(CollectionId("drama"), server, provider, "精选短剧（竖屏）")
     private val regular = MediaCollection(CollectionId("tv"), server, provider, "电视剧")
     private val series = MediaItem(MediaId("series"), server, provider, "Fixture Series", MediaType.Series)
+
+    @Test
+    fun synopsisUsesTheWorkAndFallsBackToNonblankEpisodeMetadata() {
+        assertEquals("Series synopsis", shortDramaSynopsis(" Series synopsis ", "Episode synopsis"))
+        assertEquals("Episode synopsis", shortDramaSynopsis("  ", "Episode synopsis"))
+        assertNull(shortDramaSynopsis(null, " "))
+    }
 
     @Test
     fun currentLibraryNameDeterminesModeIncludingAfterRename() = runBlocking {

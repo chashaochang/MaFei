@@ -1,8 +1,10 @@
 package cn.mafei.cmp
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import cn.mafei.cmp.core.domain.MediaItem
@@ -16,6 +18,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -53,6 +56,8 @@ internal class ShortDramaSession(
     private var foreground = true
     private var covered = false
     private var resumeAfterDetails = false
+    var speed by mutableStateOf(1f)
+        private set
 
     fun slot(episode: MediaItem): Slot? = slots[episode.id]
 
@@ -116,6 +121,12 @@ internal class ShortDramaSession(
     suspend fun seek(id: MediaId, positionMs: Long) = commands.withLock {
         if (closed || covered || active?.id != id) return@withLock
         slots[id]?.playback?.controller?.seek(positionMs)
+    }
+
+    suspend fun setSpeed(value: Float) = commands.withLock {
+        if (closed || !value.isFinite() || value !in 0.25f..4f || speed == value) return@withLock
+        speed = value
+        slots.values.forEach { it.applySpeed() }
     }
 
     suspend fun openDetails() = commands.withLock {
@@ -183,6 +194,17 @@ internal class ShortDramaSession(
                         controller.play()
                     }
                 }
+                if (generation != null && slot.runtime.capabilities.speed) {
+                    val state = slot.playback.controller.state.first {
+                        it.generation !== generation || it.phase.canSetShortDramaSpeed() ||
+                            it.phase in setOf(PlayerPhase.Error, PlayerPhase.Ended, PlayerPhase.Released)
+                    }
+                    commands.withLock {
+                        if (!closed && state.generation === generation && slot === this@ShortDramaSession.slot(episode)) {
+                            slot.applySpeed()
+                        }
+                    }
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -191,11 +213,24 @@ internal class ShortDramaSession(
         }
     }
 
+    private suspend fun Slot.applySpeed() {
+        val controller = playback.controller
+        val state = controller.state.value
+        if (runtime.capabilities.speed && state.phase.canSetShortDramaSpeed() && state.speed != speed) {
+            controller.speed(speed)
+        }
+    }
+
     private fun retire(slot: Slot) {
         platform.setSelected(slot.runtime, false)
         slot.preparation?.cancel()
         scope.launch(NonCancellable) { slot.playback.release() }
     }
+}
+
+private fun PlayerPhase.canSetShortDramaSpeed(): Boolean = when (this) {
+    PlayerPhase.Ready, PlayerPhase.Playing, PlayerPhase.Paused, PlayerPhase.Buffering -> true
+    else -> false
 }
 
 private fun PlayerPhase.acceptsPlaybackIntent(): Boolean = when (this) {
