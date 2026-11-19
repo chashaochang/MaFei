@@ -11,7 +11,7 @@ internal val MediaItem.supportsShortDrama: Boolean
     get() = mediaType in setOf(MediaType.Series, MediaType.Season, MediaType.Episode, MediaType.Movie, MediaType.Video)
 
 internal fun shortDramaMode(work: Boolean?, library: Boolean?, libraryName: String?): Boolean =
-    work ?: library ?: (libraryName?.trim() == "短剧")
+    work ?: library ?: (libraryName?.contains("短剧") == true)
 
 internal class ShortDramaEntrance(
     private val browser: MediaBrowser,

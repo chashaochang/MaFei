@@ -16,8 +16,6 @@ class ShortDramaModeTest {
     fun workOverrideWinsAndRememberedLibrarySurvivesRename() = runBlocking {
         val preferences = ShortDramaPreferences(MemorySettings())
         val scope = "server-a:viewer-a"
-        assertTrue(shortDramaMode(null, null, " 短剧 "))
-        assertFalse(shortDramaMode(null, null, "精选短剧"))
         preferences.save(scope, library = true, "library-id", true)
         preferences.save(scope, library = false, "work-id", false)
         suspend fun mode() = shortDramaMode(
@@ -31,6 +29,17 @@ class ShortDramaModeTest {
         assertNull(preferences.load("server-a:viewer-b", library = true, "library-id"))
         assertNull(preferences.load("server-b:viewer-a", library = true, "library-id"))
         assertNull(preferences.load(scope, library = false, "library-id"))
+    }
+
+    @Test
+    fun libraryNameMayContainShortDramaButExplicitModesTakePriority() {
+        assertTrue(shortDramaMode(null, null, " 短剧 "))
+        assertTrue(shortDramaMode(null, null, "精选短剧（竖屏）"))
+        assertFalse(shortDramaMode(null, null, "电视剧"))
+        assertFalse(shortDramaMode(null, null, null))
+        assertFalse(shortDramaMode(null, false, "精选短剧"))
+        assertFalse(shortDramaMode(false, true, "精选短剧"))
+        assertTrue(shortDramaMode(true, false, "电视剧"))
     }
 
     @Test
