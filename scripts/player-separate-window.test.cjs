@@ -113,9 +113,9 @@ test('failed starts report the original request and a destroyed window permits r
   assert.deepEqual(h.calls.at(-1), ['enabled', false]);
 });
 
-function abilityHost(initialStatus = 3) {
+function abilityHost(initialStatus = 4) {
   const calls = [], listeners = new Map();
-  const status = { FULL_SCREEN: 1, MAXIMIZE: 2, FLOATING: 3 };
+  const status = { FULL_SCREEN: 1, MAXIMIZE: 2, MINIMIZE: 3, FLOATING: 4 };
   const presentation = { ENTER_IMMERSIVE: 2, EXIT_IMMERSIVE: 1 };
   let id = 1, fullscreen = false, revision = 0, currentStatus = initialStatus;
   let timer, loadCallback, closeCount = 0;
@@ -223,7 +223,7 @@ test('initialization failure returns to the existing player without stopping it'
 });
 
 test('fullscreen restores floating or maximized state and respects a native exit', async () => {
-  for (const previous of [2, 3]) {
+  for (const previous of [2, 4]) {
     const h = abilityHost(previous);
     await h.ready();
     h.requestFullscreen(true); h.tick(); await flush();

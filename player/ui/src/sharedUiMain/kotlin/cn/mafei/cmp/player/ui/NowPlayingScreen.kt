@@ -224,6 +224,7 @@ fun NowPlayingScreen(
     val windowedController = hostFeatures.windowedHost
     val standaloneWindow = windowedController && LocalStandalonePlayerWindow.current
     val windowFillAvailable = windowedController && !standaloneWindow
+    val pictureInPictureAction = onPictureInPicture.takeUnless { hostFeatures.desktopWindow || standaloneWindow }
     val latestTogglePlay by rememberUpdatedState(onTogglePlay)
     val latestSeek by rememberUpdatedState(onSeek)
     val latestSpeed by rememberUpdatedState(onSpeed)
@@ -478,7 +479,7 @@ fun NowPlayingScreen(
             }} else null,
         ),
     ) {
-        val immersive = fullscreen || standaloneWindow || (windowedController && windowFullscreen)
+        val immersive = fullscreen || (windowFillAvailable && windowFullscreen)
         val windowHeaderVisible = windowedController && !immersive
         val stackedNativeChrome = maxWidth < 700.dp && hostFeatures.windowControlTopInsetDp > 0f
         val headerContentTop = safeArea.top + if (stackedNativeChrome) hostFeatures.windowControlTopInsetDp.dp else 0.dp
@@ -743,7 +744,7 @@ fun NowPlayingScreen(
                 onBack = handleBack,
                 onMenu = { openPanel(PlayerChromePanel.More) },
                 onMenuBounds = { panelAnchors[PlayerChromePanel.More] = it },
-                onPictureInPicture = onPictureInPicture,
+                onPictureInPicture = pictureInPictureAction,
                 onCasting = onCasting,
             )
         }
@@ -1022,7 +1023,7 @@ fun NowPlayingScreen(
                 onMenu = { openPanel(PlayerChromePanel.More) },
                 onMenuBounds = { panelAnchors[PlayerChromePanel.More] = it },
                 showMenu = localCapabilities.contentMode || playbackFacts != null || reportSubmitter != null,
-                onPictureInPicture = onPictureInPicture, onCasting = onCasting,
+                onPictureInPicture = pictureInPictureAction, onCasting = onCasting,
             )
         }
         if (reportComposerVisible && reportSubmitter != null) {

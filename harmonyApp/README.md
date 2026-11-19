@@ -94,8 +94,12 @@ open player preserves its size. The native surface restores the active load
 generation when it mounts, even if a device-state query has already replaced
 the original load action.
 
-The dedicated player fills its window with overlay controls and offers only
-system fullscreen. It does not add a separate in-window fullscreen mode.
+The dedicated player keeps a persistent navigation/title bar above the video
+in windowed mode, even when playback controls hide. System fullscreen hides
+this bar and fills the window with the video. There is no separate in-window
+fullscreen mode.
+The PC player hides the picture-in-picture action in both windowed and fullscreen
+modes. Phones and tablets keep their existing picture-in-picture controls.
 
 The player publishes its own safe areas, native title-button bounds and
 fullscreen state. `ApplicationVisibility` aggregates the two Ability lifecycles

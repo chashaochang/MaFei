@@ -26,6 +26,7 @@ class PlayerWindowControllerTest {
     private var toggles = 0
     private var backs = 0
     private var seek = -1L
+    private var pictureInPictureRequests = 0
 
     private fun show(width: Int = 1000, height: Int = 640, windowed: Boolean = true,
         dark: Boolean = true, phase: PlayerPhase = PlayerPhase.Paused,
@@ -52,6 +53,7 @@ class PlayerWindowControllerTest {
                         onFullscreenRequest = { requests += it; fullscreen.value = it },
                         onBack = { backs++ }, onTogglePlay = { toggles++ }, onRetry = {},
                         onSeek = { seek = it }, onSpeed = {}, onSelectTrack = { _, _ -> },
+                        onPictureInPicture = { pictureInPictureRequests++ },
                         deviceControls = volume, onPrevious = {}, onNext = {},
                         videoSurface = { Box(it.background(Color(0xFF35556B)).testTag("video")) },
                         modifier = Modifier.requiredSize((size?.value?.first ?: width).dp,
@@ -98,40 +100,94 @@ class PlayerWindowControllerTest {
         assertEquals(1, backs)
     }
 
-    @Test fun standalonePlayerFillsItsWindowAndOffersOnlySystemFullscreen() {
-        show(standalone = true)
+    @Test fun standalonePlayerKeepsItsHeaderWhenControlsHideAndOffersOnlySystemFullscreen() {
+        show(standalone = true, phase = PlayerPhase.Playing,
+            features = MaFeiWindowFeatures(windowControlTopInsetDp = 40f, windowControlEndInsetDp = 140f))
         val viewport = rule.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot
         val video = rule.onNodeWithTag("video").fetchSemanticsNode().boundsInRoot
-        assertEquals(viewport, video)
-        rule.onNodeWithTag("playerWindowHeader").assertDoesNotExist()
+        val header = rule.onNodeWithTag("playerWindowHeader").fetchSemanticsNode().boundsInRoot
+        assertEquals(header.bottom, video.top)
+        assertTrue(video.top > viewport.top)
+        assertEquals(viewport.bottom, video.bottom)
+        val more = rule.onNodeWithContentDescription("更多设置").fetchSemanticsNode().boundsInRoot
+        assertTrue(more.right <= viewport.right - 140f)
         rule.onNodeWithContentDescription("窗口内全屏").assertDoesNotExist()
         rule.onNodeWithContentDescription("系统全屏").assertIsDisplayed()
         rule.onNodeWithTag("viewport").performKeyInput { pressKey(Key.W) }
         assertTrue(requests.isEmpty())
+        rule.mainClock.advanceTimeBy(6_000)
+        rule.onNodeWithContentDescription("系统全屏").assertDoesNotExist()
+        rule.onNodeWithTag("playerWindowHeader").assertIsDisplayed()
+        rule.onNodeWithContentDescription("返回").assertIsDisplayed()
+        rule.onNodeWithContentDescription("更多设置").assertIsDisplayed()
+        assertEquals(video, rule.onNodeWithTag("video").fetchSemanticsNode().boundsInRoot)
     }
 
-    @Test fun standaloneFullscreenExitRestoresFilledWindowWithoutAnExtraBackLayer() {
+    @Test fun standaloneFullscreenExitRestoresHeaderWithoutAnExtraBackLayer() {
         show(standalone = true)
+        rule.onNodeWithTag("playerWindowHeader").assertIsDisplayed()
         rule.onNodeWithContentDescription("系统全屏").performClick()
+        rule.onNodeWithTag("playerWindowHeader").assertDoesNotExist()
+        assertEquals(rule.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot,
+            rule.onNodeWithTag("video").fetchSemanticsNode().boundsInRoot)
         rule.onNodeWithContentDescription("退出系统全屏").assertIsDisplayed()
         rule.onNodeWithContentDescription("窗口内全屏").assertDoesNotExist()
         rule.onNodeWithTag("viewport").performKeyInput { pressKey(Key.Escape) }
         assertEquals(listOf(true, false), requests)
-        rule.onNodeWithTag("playerWindowHeader").assertDoesNotExist()
+        rule.onNodeWithTag("playerWindowHeader").assertIsDisplayed()
         rule.onNodeWithTag("viewport").performKeyInput { pressKey(Key.Escape) }
         assertEquals(1, backs)
     }
 
-    @Test fun standaloneVideoFillsTheWindowWhileItsControlsAvoidNativeTitleButtons() {
+    @Test fun standaloneNarrowHeaderAvoidsNativeTitleButtonsAndKeepsTheVideoBelowIt() {
         show(500, 720, standalone = true,
             features = MaFeiWindowFeatures(windowControlTopInsetDp = 40f, windowControlEndInsetDp = 140f))
         val viewport = rule.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot
         val video = rule.onNodeWithTag("video").fetchSemanticsNode().boundsInRoot
-        assertEquals(viewport, video)
+        val header = rule.onNodeWithTag("playerWindowHeader").fetchSemanticsNode().boundsInRoot
+        assertEquals(header.bottom, video.top)
+        assertTrue(video.top > viewport.top)
         val back = rule.onNodeWithContentDescription("返回").fetchSemanticsNode().boundsInRoot
         val more = rule.onNodeWithContentDescription("更多设置").fetchSemanticsNode().boundsInRoot
         assertTrue(back.top >= viewport.top + 40f)
-        assertTrue(more.right <= viewport.right - 140f)
+        assertTrue(more.top >= viewport.top + 40f)
+        assertTrue(more.right <= viewport.right)
+    }
+
+    @Test fun standalonePlayerHidesPictureInPictureInNarrowAndFullscreenWindows() {
+        show(500, 720, standalone = true)
+        rule.onNodeWithContentDescription("画中画").assertDoesNotExist()
+        rule.onNodeWithContentDescription("系统全屏").performClick()
+        rule.onNodeWithContentDescription("画中画").assertDoesNotExist()
+        rule.onNodeWithTag("viewport").performKeyInput { pressKey(Key.Escape) }
+        rule.onNodeWithContentDescription("画中画").assertDoesNotExist()
+        assertEquals(0, pictureInPictureRequests)
+    }
+
+    @Test fun desktopPlayerHidesPictureInPictureInWindowedAndFullscreenModes() {
+        show(features = MaFeiWindowFeatures(desktopWindow = true))
+        rule.onNodeWithContentDescription("画中画").assertDoesNotExist()
+        rule.onNodeWithContentDescription("系统全屏").performClick()
+        rule.onNodeWithContentDescription("画中画").assertDoesNotExist()
+        assertEquals(0, pictureInPictureRequests)
+    }
+
+    @Test fun phoneKeepsItsPictureInPictureAction() {
+        show(400, 800, windowed = false)
+        rule.onNodeWithContentDescription("画中画").assertIsDisplayed().performClick()
+        assertEquals(1, pictureInPictureRequests)
+    }
+
+    @Test fun tabletKeepsItsPictureInPictureAction() {
+        show(800, 600, windowed = false)
+        rule.onNodeWithContentDescription("画中画").assertIsDisplayed().performClick()
+        assertEquals(1, pictureInPictureRequests)
+    }
+
+    @Test fun freeformTabletKeepsItsPictureInPictureAction() {
+        show(500, 720)
+        rule.onNodeWithContentDescription("画中画").assertIsDisplayed().performClick()
+        assertEquals(1, pictureInPictureRequests)
     }
 
     @Test fun freeformTabletUsesWindowControlsEvenInANarrowPortraitWindow() {
