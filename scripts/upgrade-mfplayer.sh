@@ -67,12 +67,13 @@ HAR_ENTRY_COUNT="$(printf '%s\n' "$HAR_ENTRIES" | awk 'NF { count += 1 } END { p
 HAR_ENTRY="$HAR_ENTRIES"
 unzip -p "$SDK_ZIP" "$HAR_ENTRY" > "$STAGED_HAR"
 tar -tzf "$STAGED_HAR" >/dev/null || fail "SDK 中的 HAR 不是有效 gzip HAR"
+HAR_MEMBERS="$(tar -tzf "$STAGED_HAR")"
 
 for REQUIRED_MEMBER in \
   "package/libs/arm64-v8a/libmpv.so.2" \
   "package/libs/arm64-v8a/libmpvnative.so" \
   "package/oh-package.json5"; do
-  tar -tzf "$STAGED_HAR" | grep -Fxq "$REQUIRED_MEMBER" || \
+  grep -Fxq "$REQUIRED_MEMBER" <<< "$HAR_MEMBERS" || \
     fail "HAR 缺少必需文件: $REQUIRED_MEMBER"
 done
 
@@ -101,7 +102,7 @@ fi
 info "刷新 OHPM 依赖"
 (
   cd "$OHOS_APP"
-  "$OHPM_BIN" install
+  "$OHPM_BIN" install --all
 )
 
 HAR_MPV="$TMP_DIR/har-libmpv.so.2"
@@ -111,32 +112,15 @@ tar -xOf "$HAR_DEST" package/libs/arm64-v8a/libmpvnative.so > "$HAR_NATIVE"
 HAR_MPV_SHA="$(sha256 "$HAR_MPV")"
 HAR_NATIVE_SHA="$(sha256 "$HAR_NATIVE")"
 
-INSTALLED_MPV_PATHS="$(find "$OHOS_APP/oh_modules/.ohpm" -type f \
-  -path '*/oh_modules/mfplayer/libs/arm64-v8a/libmpv.so.2' -print 2>/dev/null || true)"
-INSTALLED_NATIVE_PATHS="$(find "$OHOS_APP/oh_modules/.ohpm" -type f \
-  -path '*/oh_modules/mfplayer/libs/arm64-v8a/libmpvnative.so' -print 2>/dev/null || true)"
-[[ -n "$INSTALLED_MPV_PATHS" ]] || fail "OHPM 安装后未找到 MFPlayer libmpv.so.2"
-[[ -n "$INSTALLED_NATIVE_PATHS" ]] || fail "OHPM 安装后未找到 MFPlayer libmpvnative.so"
-
-INSTALLED_MPV=""
-while IFS= read -r CANDIDATE; do
-  [[ -z "$CANDIDATE" ]] && continue
-  if [[ "$(sha256 "$CANDIDATE")" == "$HAR_MPV_SHA" ]]; then
-    INSTALLED_MPV="$CANDIDATE"
-    break
-  fi
-done <<< "$INSTALLED_MPV_PATHS"
-[[ -n "$INSTALLED_MPV" ]] || fail "OHPM 中的 libmpv.so.2 与输入 HAR 不一致，可能仍命中缓存"
-
-INSTALLED_NATIVE=""
-while IFS= read -r CANDIDATE; do
-  [[ -z "$CANDIDATE" ]] && continue
-  if [[ "$(sha256 "$CANDIDATE")" == "$HAR_NATIVE_SHA" ]]; then
-    INSTALLED_NATIVE="$CANDIDATE"
-    break
-  fi
-done <<< "$INSTALLED_NATIVE_PATHS"
-[[ -n "$INSTALLED_NATIVE" ]] || fail "OHPM 中的 libmpvnative.so 与输入 HAR 不一致，可能仍命中缓存"
+INSTALLED_LIB_DIR="$ENTRY_DIR/oh_modules/mfplayer/libs/arm64-v8a"
+INSTALLED_MPV="$INSTALLED_LIB_DIR/libmpv.so.2"
+INSTALLED_NATIVE="$INSTALLED_LIB_DIR/libmpvnative.so"
+[[ -f "$INSTALLED_MPV" && -f "$INSTALLED_NATIVE" ]] || \
+  fail "OHPM 未为 entry 解析到完整的 MFPlayer native 库"
+[[ "$(sha256 "$INSTALLED_MPV")" == "$HAR_MPV_SHA" ]] || \
+  fail "entry 解析到的 libmpv.so.2 与输入 HAR 不一致"
+[[ "$(sha256 "$INSTALLED_NATIVE")" == "$HAR_NATIVE_SHA" ]] || \
+  fail "entry 解析到的 libmpvnative.so 与输入 HAR 不一致"
 
 STUDIO_HOME="$DEVECO_STUDIO_HOME"
 if [[ -z "$STUDIO_HOME" ]]; then
@@ -171,6 +155,8 @@ info "构建 default 签名 HAP"
 [[ -f "$HAP_PATH" ]] || fail "未生成预期 HAP: $HAP_PATH"
 [[ "$HAP_PATH" -nt "$BUILD_STAMP" ]] || \
   fail "预期 HAP 未在本次构建后更新，停止以避免误用旧产物"
+node "$PROJECT_ROOT/runscript/resolveOhosBundle.cjs" \
+  --verify-hap "$HAP_PATH" debug cn.xiaobai.mafei.dev
 
 HAP_MPV="$TMP_DIR/hap-libmpv.so.2"
 HAP_NATIVE="$TMP_DIR/hap-libmpvnative.so"

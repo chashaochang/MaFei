@@ -2,12 +2,14 @@ import { HvigorPlugin } from '@ohos/hvigor';
 import { appTasks, OhosAppContext, OhosPluginId } from '@ohos/hvigor-ohos-plugin';
 
 const { resolveBundleName } = require('../runscript/resolveOhosBundle.cjs');
+const { assertReleaseMfplayer } = require('../scripts/verify-mfplayer-release.cjs');
 
 const developmentBundle: HvigorPlugin = {
   pluginId: 'mafei.development-bundle',
   apply(node) {
     node.afterNodeEvaluate(() => {
       const context = node.getContext(OhosPluginId.OHOS_APP_PLUGIN) as OhosAppContext;
+      if (context.getBuildMode() === 'release') assertReleaseMfplayer(node.getNodePath());
       const appJson = context.getAppJsonOpt();
       appJson.app.bundleName = resolveBundleName(appJson.app.bundleName, context.getBuildMode());
       context.setAppJsonOpt(appJson);

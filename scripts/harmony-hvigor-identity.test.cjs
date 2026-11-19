@@ -11,7 +11,7 @@ const base = 'cn.xiaobai.mafei';
 
 // Execute the real hook with fake Hvigor services, without loading the SDK,
 // reading local signing material, or starting a build.
-function loadHook() {
+function loadHook(assertReleaseMfplayer) {
   const requireFromHook = createRequire(hvigorfile);
   const source = stripTypeScriptTypes(fs.readFileSync(hvigorfile, 'utf8'))
     .replace(/^import \{([^}]+)\} from ('[^']+');$/gm, 'const {$1} = require($2);')
@@ -24,13 +24,14 @@ function loadHook() {
       if (id === '@ohos/hvigor-ohos-plugin') {
         return { appTasks() {}, OhosPluginId: { OHOS_APP_PLUGIN: 'com.ohos.app' } };
       }
+      if (id === '../scripts/verify-mfplayer-release.cjs') return { assertReleaseMfplayer };
       return requireFromHook(id);
     },
   }, { filename: hvigorfile });
   return module.exports.plugins[0];
 }
 
-function runHook(mode, profile, currentProduct = 'default') {
+function runHook(mode, profile, currentProduct = 'default', verifySdk = () => {}) {
   const sourceApp = { app: { bundleName: base, label: '$string:app_name' } };
   const sourceProfile = structuredClone(profile);
   let appModel = structuredClone(sourceApp);
@@ -48,7 +49,8 @@ function runHook(mode, profile, currentProduct = 'default') {
     },
     getCurrentProduct: () => ({ getProductName: () => currentProduct }),
   };
-  loadHook().apply({
+  loadHook(verifySdk).apply({
+    getNodePath: () => path.dirname(hvigorfile),
     afterNodeEvaluate(callback) { afterEvaluate = callback; },
     getContext(pluginId) {
       assert.equal(pluginId, 'com.ohos.app');
@@ -88,6 +90,15 @@ test('Release preserves the configured official identity and signing', () => {
   assert.equal(result.app.bundleName, base);
   assert.deepEqual(result.profile, localProfile);
   assert.equal(result.signingUpdates, 0);
+});
+
+test('Release invokes the SDK guard and debug remains usable with a development SDK', () => {
+  const reject = directory => {
+    assert.equal(directory, path.dirname(hvigorfile));
+    throw new Error('development-only SDK');
+  };
+  assert.throws(() => runHook('release', localProfile, 'default', reject), /development-only SDK/);
+  runHook('debug', localProfile, 'default', reject);
 });
 
 test('switching build modes leaves source configuration reusable without suffix accumulation', () => {
