@@ -48,6 +48,10 @@ interface IosAvPlayerBridge {
     fun releasePlayer(handle: Long)
     /** True only when the platform audio session really grants background music playback. */
     fun configureAudioOnly(handle: Long, audioOnly: Boolean): Boolean = false
+    /** An SDK session has no AVPlayer handle; a token keeps retired engines from clearing its successor. */
+    fun beginSdkPlayback(audioOnly: Boolean): Long = 0
+    fun updateSdkPlayback(token: Long, positionMs: Long, durationMs: Long, speed: Float) {}
+    fun endSdkPlayback(token: Long) {}
     /** Returns a binding token so a retired scene cannot detach a newer scene's controls. */
     fun bindSystemControls(title: String, canNext: Boolean, canPrevious: Boolean,
         handler: (String, Double) -> Unit): Long = 0

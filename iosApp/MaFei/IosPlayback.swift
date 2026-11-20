@@ -24,6 +24,8 @@ final class ApplePlayerBridge: NSObject, IosAvPlayerBridge {
     private var next: Int64 = 0
     private var players: [Int64: Playback] = [:]
     private var systemPlayer: Int64 = 0
+    private var sdkSession: Int64 = 0
+    private var sdkProgress: (position: Int64, duration: Int64, speed: Float)?
     private var controlBinding: Int64 = 0
     private var controlHandler: ((String, KotlinDouble) -> Void)?
     private var commandTargets: [(MPRemoteCommand, Any)] = []
@@ -81,6 +83,32 @@ final class ApplePlayerBridge: NSObject, IosAvPlayerBridge {
             return audioOnly
         } catch { p.audioOnly = false; return false }
     }
+    func beginSdkPlayback(audioOnly: Bool) -> Int64 {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playback, mode: audioOnly ? .default : .moviePlayback)
+            try session.setActive(true)
+        } catch { return 0 }
+        next += 1
+        sdkSession = next
+        sdkProgress = (0, 0, 0)
+        lastSystemUpdate = 0
+        updateSystemMetadata(force: true)
+        return sdkSession
+    }
+    func updateSdkPlayback(token: Int64, positionMs: Int64, durationMs: Int64, speed: Float) {
+        guard token != 0, token == sdkSession else { return }
+        let rateChanged = sdkProgress?.speed != speed
+        sdkProgress = (positionMs, durationMs, speed)
+        updateSystemMetadata(force: rateChanged)
+    }
+    func endSdkPlayback(token: Int64) {
+        guard token != 0, token == sdkSession else { return }
+        sdkSession = 0
+        sdkProgress = nil
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
     func bindSystemControls(title: String, canNext: Bool, canPrevious: Bool,
                             handler: @escaping (String, KotlinDouble) -> Void) -> Int64 {
         clearCommandTargets()
@@ -125,13 +153,21 @@ final class ApplePlayerBridge: NSObject, IosAvPlayerBridge {
     private func updateSystemMetadata(force: Bool = false) {
         let now = Date.timeIntervalSinceReferenceDate
         guard force || now - lastSystemUpdate >= 1 else { return }
-        guard controlHandler != nil, let player = players[systemPlayer] else { return }
+        guard controlHandler != nil else { return }
+        let playback: (position: Int64, duration: Int64, speed: Float)
+        if let sdkProgress {
+            playback = sdkProgress
+        } else if let player = players[systemPlayer] {
+            playback = (milliseconds(player.player.currentTime()), milliseconds(player.player.currentItem?.duration), player.player.rate)
+        } else {
+            return
+        }
         lastSystemUpdate = now
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
             MPMediaItemPropertyTitle: mediaTitle,
-            MPMediaItemPropertyPlaybackDuration: Double(milliseconds(player.player.currentItem?.duration)) / 1000,
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: Double(milliseconds(player.player.currentTime())) / 1000,
-            MPNowPlayingInfoPropertyPlaybackRate: player.player.rate,
+            MPMediaItemPropertyPlaybackDuration: Double(playback.duration) / 1000,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: Double(playback.position) / 1000,
+            MPNowPlayingInfoPropertyPlaybackRate: playback.speed,
         ]
     }
     func seek(handle: Int64, positionMs: Int64) {

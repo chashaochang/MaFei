@@ -2,24 +2,15 @@ package cn.mafei.cmp
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.interop.UIKitView
 import cn.mafei.cmp.player.api.*
-import cn.mafei.cmp.player.runtime.createPlayerRuntime
 import cn.mafei.cmp.player.runtime_ios.IosAvPlayerBridge
-import cn.mafei.cmp.player.runtime_ios.IosSurfaceRegistry
-import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import platform.UIKit.UIView
 
-/** AVFoundation is implemented by Swift; no dependency on the incomplete CPF AVFoundation klib. */
 internal class IosPlayerHost(private val bridge: IosAvPlayerBridge) {
-    private val surfaces = IosSurfaceRegistry()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    fun createRuntime() = createPlayerRuntime(bridge, surfaces, scope)
+    private val engine = IosPlaybackEngine(bridge)
+    fun createRuntime() = engine.createRuntime()
 
-    @OptIn(ExperimentalForeignApi::class)
     @Composable
     fun Surface(controller: PlayerController, modifier: Modifier) {
         val screenAwakeOwner = remember { Any() }
@@ -50,12 +41,6 @@ internal class IosPlayerHost(private val bridge: IosAvPlayerBridge) {
             } else 0L
             onDispose { if (binding != 0L) bridge.unbindSystemControls(binding) }
         }
-        val view = remember(controller) { bridge.createVideoView() as UIView }
-        val surface = remember(view) { surfaces.register(view.layer) }
-        LaunchedEffect(controller, surface) { controller.attachSurface(surface) }
-        DisposableEffect(controller, surface) {
-            onDispose { scope.launch { controller.detachSurface(surface) }; surfaces.unregister(surface) }
-        }
-        UIKitView(factory = { view }, modifier = modifier)
+        engine.Surface(controller, modifier)
     }
 }

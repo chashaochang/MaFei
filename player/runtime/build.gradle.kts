@@ -36,6 +36,23 @@ if (useCmpPlayer) {
             named("desktopMain") {
                 dependencies { implementation("org.mfplayer.cmp:player-desktop:0.1.0-rc.1") }
             }
+            named("iosMain") {
+                kotlin.srcDir("src/iosMfplayerMain/kotlin")
+                dependencies {
+                    // The SDK's view shares Compose with the CPF host, not a second upstream runtime.
+                    api("org.mfplayer.cmp:player-ios:0.1.0-rc.1") {
+                        exclude(group = "org.jetbrains.compose.runtime")
+                        exclude(group = "org.jetbrains.compose.ui")
+                        exclude(group = "org.jetbrains.compose.foundation")
+                        exclude(group = "org.jetbrains.compose.material3")
+                        exclude(group = "org.jetbrains.androidx.lifecycle")
+                    }
+                    implementation(libs.compose.runtime)
+                    implementation(libs.compose.ui)
+                    implementation(libs.compose.foundation)
+                    implementation(libs.compose.material3)
+                }
+            }
             named("desktopTest") {
                 kotlin.srcDir("src/mfplayerTest/kotlin")
                 dependencies { implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2") }

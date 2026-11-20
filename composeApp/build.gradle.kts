@@ -216,6 +216,11 @@ kotlin {
         }
 
         val iosMain by creating {
+            kotlin.srcDir(if (providers.gradleProperty("mafeiCmpPlayer").orNull == "true") {
+                "src/iosMfplayerMain/kotlin"
+            } else {
+                "src/iosSystemMain/kotlin"
+            })
             dependsOn(cpfUiMain)
             dependencies {
                 api(project(":player:api"))
