@@ -8,7 +8,7 @@ import cn.mafei.cmp.session.ApplicationRuntime
 import cn.mafei.cmp.session.ProcessApplication
 import cn.mafei.cmp.storage.createIosSettings
 import cn.mafei.cmp.platform.secure_storage_ios.IosKeychainCredentialStore
-import cn.mafei.cmp.platform.http_ios.createIosHttpTransport
+import cn.mafei.cmp.platform.http.createPlatformHttpTransport
 
 private var processPlayerHost: IosPlayerHost? = null
 
@@ -27,7 +27,7 @@ fun MainViewController(
     val player = processPlayerHost ?: IosPlayerHost(playerBridge).also { processPlayerHost = it }
     return ComposeUIViewController {
     val runtime = ProcessApplication.getOrCreate {
-        ApplicationRuntime(createIosSettings(), IosKeychainCredentialStore("cn.mafei.credentials.v1"), createIosHttpTransport(),
+        ApplicationRuntime(createIosSettings(), IosKeychainCredentialStore("cn.mafei.credentials.v1"), createPlatformHttpTransport(),
             playerRuntimeFactory = { player.runtime() }, photoSaver = IosPhotoSaver, externalSubtitleOverlay = true)
     }
     val navigationOwner = rememberNavigationEventDispatcherOwner(parent = null)

@@ -12,7 +12,7 @@ import cn.mafei.cmp.session.ApplicationRuntime
 import cn.mafei.cmp.session.ProcessApplication
 import cn.mafei.cmp.storage.createAndroidSettings
 import cn.mafei.cmp.platform.secure_storage_android.AndroidSecureCredentialStore
-import cn.mafei.cmp.platform.http_android.createAndroidHttpTransport
+import cn.mafei.cmp.platform.http.createPlatformHttpTransport
 
 class MainActivity : ComponentActivity() {
     private var playerScreenVisible = false
@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
             ApplicationRuntime(
                 createAndroidSettings(applicationContext),
                 AndroidSecureCredentialStore(applicationContext),
-                createAndroidHttpTransport(),
+                createPlatformHttpTransport(),
                 playerRuntimeFactory = { playerHost.createRuntime() },
                 // 播放页左侧调亮度、右侧调音量；窗口亮度与 STREAM_MUSIC 都归属本 Activity。
                 deviceControls = AndroidDeviceControls(this),

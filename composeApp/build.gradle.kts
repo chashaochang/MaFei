@@ -114,6 +114,7 @@ kotlin {
                 implementation(project(":providers:jellyfin:facade"))
                 implementation(project(":providers:feiniu:facade"))
                 implementation(project(":providers:plex:core"))
+                implementation(project(":platform:http"))
 
                 implementation(project(":common:core"))
                 implementation(project(":common:glass"))
@@ -167,7 +168,6 @@ kotlin {
                 implementation(libs.androidx.activity.compose)
                 implementation("androidx.webkit:webkit:1.14.0")
                 implementation(project(":player:runtime-android"))
-                implementation(project(":platform:http-android"))
                 implementation(project(":platform:secure-storage-android"))
             }
         }
@@ -203,7 +203,6 @@ kotlin {
                 // do not let its transitive graph replace our frozen multiplatform core.
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2") { isTransitive = false }
                 implementation(project(":player:runtime-macos"))
-                implementation(project(":platform:http-macos"))
                 implementation(project(":platform:secure-storage-macos"))
             }
         }
@@ -222,7 +221,6 @@ kotlin {
             dependencies {
                 api(project(":player:runtime-ios"))
                 api(project(":player:api"))
-                implementation(project(":platform:http-ios"))
                 implementation(project(":platform:secure-storage-ios"))
             }
         }
@@ -248,7 +246,6 @@ kotlin {
             dependencies {
                 api(libs.compose.export)
                 implementation(project(":player:runtime-ohos"))
-                implementation(project(":platform:http-ohos"))
                 implementation(project(":platform:secure-storage-ohos"))
                 implementation(project(":platform:secure-storage-core"))
             }

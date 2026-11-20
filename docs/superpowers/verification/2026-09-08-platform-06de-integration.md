@@ -9,10 +9,10 @@ SDK 与真实持久设置后端的应用接线未完成，见 [04E 增量](../pl
 Desktop **15/15**、Android **14/14**，iOS/OHOS 编译通过。
 
 后续网络增量：iOS Darwin 薄绑定已在 iPhone ARM 模拟器通过 7 项实际 loopback 测试，
-共享 JVM 双目标各 32 项通过，见 [iOS HTTP](../../../platform/http-ios/README.md)。
+共享 JVM 双目标各 32 项通过，见 [iOS HTTP](../../../platform/http/README-ios.md)。
 OHOS 后续已复用 CPF Curl 的 HTTP-only 源码修补版，保留原 cinterop/libcurl，
 消除缺失符号并修补取消与资源清理。12 项 OHOS 测试仅编译链接，unsigned ARM64 HAP
-构建及 artifact 门禁通过；无设备，运行仍 Pending，见 [OHOS HTTP](../../../platform/http-ohos/README.md)。
+构建及 artifact 门禁通过；无设备，运行仍 Pending，见 [OHOS HTTP](../../../platform/http/README-ohos.md)。
 下文保留安全存储批次当时的历史状态。
 
 本轮并行分工：子 Agent 实现 Mac JVM/JNI Keychain；主线实现 OHOS AssetStore、补 Mac 独立隐私回归、审查与集成。没有进入业务 UI 重写，也没有更改旧鸿蒙参考目录。

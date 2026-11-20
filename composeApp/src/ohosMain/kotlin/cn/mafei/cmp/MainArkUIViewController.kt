@@ -26,7 +26,7 @@ import cn.mafei.cmp.storage.CompatibleOhosCredentialStore
 import cn.mafei.cmp.storage.ImportingSettingsStorage
 import cn.mafei.cmp.storage.createOhosSettings
 import cn.mafei.cmp.storage.legacyCmpSettings
-import cn.mafei.cmp.platform.http_ohos.createOhosHttpTransport
+import cn.mafei.cmp.platform.http.createPlatformHttpTransport
 import cn.mafei.cmp.platform.secure_storage_ohos.OhosAssetCredentialStore
 import cn.mafei.cmp.data.migration.LegacySnapshotPayloadReader
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
@@ -186,7 +186,7 @@ fun MainArkUIViewController(
                 ),
                 settings = settings,
             ),
-            createOhosHttpTransport(),
+            createPlatformHttpTransport(),
             playerRuntimeFactory = { createOhosPlayerRuntime() },
             // 播放页左侧调亮度、右侧调音量：亮度/音量只能经 ArkUI 拿到，所以值由
             // MaFeiPlayerSurface 的 ArkTS 宿主推送，写入也回给它执行。

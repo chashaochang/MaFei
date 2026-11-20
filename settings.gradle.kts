@@ -83,11 +83,7 @@ include(
     ":player:facade",
     ":player:testkit",
 
-    ":platform:http-ktor",
-    ":platform:http-android",
-    ":platform:http-ios",
-    ":platform:http-ohos",
-    ":platform:http-macos",
+    ":platform:http",
     ":platform:secure-storage-core",
     ":platform:secure-storage-android",
     ":platform:secure-storage-ios",
