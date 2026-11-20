@@ -141,7 +141,7 @@ class BrowseShellMappingTest {
             BrowseMineRoute, BrowseMineHistoryRoute, BrowseAccountSwitchRoute, BrowseAddAccountRoute,
             BrowseConnectAccountRoute(ProviderKind.Jellyfin), BrowseServerDiscoveryRoute,
             BrowseSettingsRoute, BrowseManagementRoute(taskId = "task"), BrowseManagementDevicesRoute("device"),
-            BrowseFeiniuConnectionPreferenceRoute, BrowseAppearanceRoute, BrowseGlassStyleRoute,
+            BrowseFeiniuConnectionPreferenceRoute, BrowseAppearanceRoute, BrowseBottomNavigationSettingsRoute,
             BrowsePlayerSettingsRoute, BrowseAddGroupRoute, BrowseAboutPrivacyRoute,
             BrowseUserAgreementRoute, BrowseWebITongRoute, BrowsePrivacyWebRoute,
         )

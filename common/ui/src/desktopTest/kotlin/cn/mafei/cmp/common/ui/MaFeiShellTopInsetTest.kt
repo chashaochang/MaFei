@@ -23,8 +23,6 @@ import cn.mafei.cmp.common.design_system.MaFeiSafeArea
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.MaFeiWindowFeatures
 import cn.mafei.cmp.common.design_system.mafeiLayout
-import cn.mafei.cmp.common.glass.GlassStyle
-import cn.mafei.cmp.common.glass.GlassStyleScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -82,34 +80,32 @@ class MaFeiShellTopInsetTest {
 
     private fun setContent() = rule.setContent {
         MaFeiTheme(darkTheme = dark.value) {
-            GlassStyleScope(GlassStyle.Translucent) {
-                val phone = family.value == MaFeiLayoutFamily.Phone
-                val width = if (phone) 390.dp else 1000.dp
-                val layout = mafeiLayout(width.value, 700f).copy(family = family.value)
-                CompositionLocalProvider(LocalMaFeiWindowFeatures provides MaFeiWindowFeatures(
-                    safeInsets = MaFeiInsetsDp(top = topInset.value),
-                    desktopWindow = family.value == MaFeiLayoutFamily.Desktop,
-                    windowedHost = !phone,
-                )) {
-                    Box(Modifier.size(width, 700.dp).testTag("window")) {
-                        MaFeiAdaptiveShell(layout, listOf(MaFeiNavItem("home", "首页", MaFeiGlyph.Home)),
-                            "home", onDestination = {}, libraries = emptyList(), selectedLibrary = null,
-                            onLibrary = {}, accountLabel = "测试账号", contentNavigationActive = secondary.value,
-                            background = { Box(Modifier.fillMaxSize().background(Color.Black)) }, accountActions = {},
-                            windowControls = {
-                                Box(Modifier.size(12.dp).testTag("window-control").clickable { windowClicks++ })
-                            },
-                            windowDragArea = { content ->
-                                Box(Modifier.size(32.dp).testTag("window-drag")) { content() }
-                            },
-                            scene = {
-                                routeSafeArea = LocalMaFeiSafeArea.current
-                                Box(Modifier.fillMaxSize().testTag("pane").background(paneColor)) {
-                                    Box(Modifier.align(Alignment.TopEnd).size(32.dp).testTag("page-control")
-                                        .clickable { pageClicks++ })
-                                }
-                            }, overlay = {})
-                    }
+            val phone = family.value == MaFeiLayoutFamily.Phone
+            val width = if (phone) 390.dp else 1000.dp
+            val layout = mafeiLayout(width.value, 700f).copy(family = family.value)
+            CompositionLocalProvider(LocalMaFeiWindowFeatures provides MaFeiWindowFeatures(
+                safeInsets = MaFeiInsetsDp(top = topInset.value),
+                desktopWindow = family.value == MaFeiLayoutFamily.Desktop,
+                windowedHost = !phone,
+            )) {
+                Box(Modifier.size(width, 700.dp).testTag("window")) {
+                    MaFeiAdaptiveShell(layout, listOf(MaFeiNavItem("home", "首页", MaFeiGlyph.Home)),
+                        "home", onDestination = {}, libraries = emptyList(), selectedLibrary = null,
+                        onLibrary = {}, accountLabel = "测试账号", contentNavigationActive = secondary.value,
+                        background = { Box(Modifier.fillMaxSize().background(Color.Black)) }, accountActions = {},
+                        windowControls = {
+                            Box(Modifier.size(12.dp).testTag("window-control").clickable { windowClicks++ })
+                        },
+                        windowDragArea = { content ->
+                            Box(Modifier.size(32.dp).testTag("window-drag")) { content() }
+                        },
+                        scene = {
+                            routeSafeArea = LocalMaFeiSafeArea.current
+                            Box(Modifier.fillMaxSize().testTag("pane").background(paneColor)) {
+                                Box(Modifier.align(Alignment.TopEnd).size(32.dp).testTag("page-control")
+                                    .clickable { pageClicks++ })
+                            }
+                        }, overlay = {})
                 }
             }
         }

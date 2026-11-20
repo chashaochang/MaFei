@@ -37,14 +37,12 @@ fun App(
 ) {
     val sessionState by runtime.sessions.state.collectAsState()
     val appearance by runtime.appearance.state.collectAsState()
-    val glassStyle by runtime.glassStyle.state.collectAsState()
     val darkAppearance = appearance.dark(androidx.compose.foundation.isSystemInDarkTheme())
     LaunchedEffect(runtime) { runtime.appearance.load() }
-    LaunchedEffect(runtime) { runtime.glassStyle.load() }
+    LaunchedEffect(runtime) { runtime.bottomNavigationSettings.load() }
     var probe by remember { mutableStateOf(false) }
     val accounts = remember(runtime) { runtime.accountAccess() }
     val startup = rememberApplicationStartup(runtime)
-    BindGlassShaderWarmup(startupIdle = !startup.starting)
     val preferences = rememberApplicationPreferences(runtime)
     CompositionLocalProvider(LocalApplicationRuntime provides runtime) {
         if (probe) {
@@ -63,7 +61,7 @@ fun App(
             SideEffect { onThemeChanged(darkAppearance) }
             MaFeiTheme(darkTheme = darkAppearance) {
                 val health = rememberGlassRenderHealth()
-                GlassRenderingEnvironment(health, intensity = preferences.liquidGlassIntensity, style = glassStyle) {
+                GlassRenderingEnvironment(health) {
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                         if (startup.starting) {
                             StaticAppCanvas { if (startup.showStartupProgress) PonyStartupLoading(exiting = startup.startupExiting) }
@@ -93,8 +91,6 @@ fun App(
                                                 runtime = runtime,
                                                 session = session,
                                                 busy = startup.busy,
-                                                liquidGlassIntensity = preferences.liquidGlassIntensity,
-                                                onLiquidGlassIntensityChanged = preferences::setGlassIntensity,
                                                 homeCarouselVisible = preferences.homeCarouselVisibleState,
                                                 onHomeCarouselVisibleChanged = preferences::setHomeCarouselVisible,
                                                 playerRenderMode = preferences.playerRenderMode,

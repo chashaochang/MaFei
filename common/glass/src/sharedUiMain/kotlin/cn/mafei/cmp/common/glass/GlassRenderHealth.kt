@@ -9,11 +9,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 
-/** Default product-wide liquid-glass background blur: a balanced setting. */
-const val DefaultGlassIntensity = 0.5f
-
 /**
- * Shell/window-owned failure latch. A recoverable blur/lens initialization
+ * Shell/window-owned failure latch. A recoverable blur initialization
  * exception makes every surface in this scope opaque until the scope is rebuilt.
  * Changing theme, requested level or accessibility preferences does not reset it.
  * This does not promise recovery from native GPU crashes or capture/layer failures.
@@ -34,34 +31,11 @@ fun rememberGlassRenderHealth(): GlassRenderHealth = remember { GlassRenderHealt
 
 internal val LocalGlassRenderHealth = staticCompositionLocalOf<GlassRenderHealth?> { null }
 
-/**
- * Product-wide liquid-glass background-blur strength. The liquid material itself
- * (lens, highlight, shadow and tint) remains enabled at every value.
- */
-internal val LocalGlassIntensity = staticCompositionLocalOf { DefaultGlassIntensity }
-internal val LocalGlassStyle = staticCompositionLocalOf { GlassStyle.Liquid }
-
-@Composable
-fun currentGlassStyle(): GlassStyle = LocalGlassStyle.current
-
-/** Provides a page-specific material fallback for content hosted outside Compose. */
-@Composable
-fun GlassStyleScope(style: GlassStyle, content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalGlassStyle provides style, content = content)
-}
-
 /** No process-global latch: independent windows have independent rendering health. */
 @Composable
 fun GlassRenderingEnvironment(
     health: GlassRenderHealth,
-    intensity: Float = DefaultGlassIntensity,
-    style: GlassStyle = GlassStyle.Liquid,
     content: @Composable () -> Unit,
 ) {
-    CompositionLocalProvider(
-        LocalGlassRenderHealth provides health,
-        LocalGlassIntensity provides intensity.coerceIn(0f, 1f),
-        LocalGlassStyle provides style,
-        content = content,
-    )
+    CompositionLocalProvider(LocalGlassRenderHealth provides health, content = content)
 }

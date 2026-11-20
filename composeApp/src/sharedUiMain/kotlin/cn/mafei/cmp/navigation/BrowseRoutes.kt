@@ -67,7 +67,7 @@ internal data object BrowseFeiniuConnectionPreferenceRoute : BrowseRoute
 internal data object BrowseAppearanceRoute : BrowseRoute
 
 @Serializable
-internal data object BrowseGlassStyleRoute : BrowseRoute
+internal data object BrowseBottomNavigationSettingsRoute : BrowseRoute
 
 @Serializable
 internal data object BrowsePlayerSettingsRoute : BrowseRoute

@@ -28,10 +28,10 @@ final class ProbeSmokeTests: XCTestCase {
         app.launch()
         tap("实验室", in: app)
         XCTAssertTrue(target("Compose 资源已加载", in: app).waitForExistence(timeout: 15), app.debugDescription)
-        tap("液态玻璃 · 收起说明", in: app)
-        XCTAssertTrue(target("液态玻璃 · 展开说明", in: app).exists)
-        tap("液态玻璃 · 展开说明", in: app)
-        for (index, material) in ["完整玻璃", "简化玻璃", "实体背景"].enumerated() {
+        tap("磨砂材质 · 收起说明", in: app)
+        XCTAssertTrue(target("磨砂材质 · 展开说明", in: app).exists)
+        tap("磨砂材质 · 展开说明", in: app)
+        for (index, material) in ["高斯模糊", "实体背景"].enumerated() {
             tap(material, in: app)
             tap("命中 · \(index)", in: app)
             XCTAssertTrue(target("命中 · \(index + 1)", in: app).exists)
@@ -39,18 +39,18 @@ final class ProbeSmokeTests: XCTestCase {
         tap("检查弹层", in: app)
         XCTAssertTrue(target("弹层可读性检查", in: app).exists)
         tap("关闭", in: app)
-        XCTAssertTrue(target("命中 · 3", in: app).exists)
+        XCTAssertTrue(target("命中 · 2", in: app).exists)
         XCUIDevice.shared.orientation = .landscapeLeft
         let landscapeReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             app.frame.width > app.frame.height
         }, object: app)
         XCTAssertEqual(XCTWaiter.wait(for: [landscapeReady], timeout: 10), .completed)
-        XCTAssertTrue(target("命中 · 3", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(target("命中 · 2", in: app).waitForExistence(timeout: 10))
         // Reading semantics alone can see the old tree during UIKit rotation.
         // Wait for the rotation animation, then prove the new hit region works.
         Thread.sleep(forTimeInterval: 1)
-        tap("命中 · 3", in: app)
-        XCTAssertTrue(target("命中 · 4", in: app).exists)
+        tap("命中 · 2", in: app)
+        XCTAssertTrue(target("命中 · 3", in: app).exists)
         let landscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         landscape.name = "Probe landscape"
         landscape.lifetime = .keepAlways
@@ -62,7 +62,7 @@ final class ProbeSmokeTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [portraitReady], timeout: 10), .completed)
         XCUIDevice.shared.press(.home)
         app.activate()
-        XCTAssertTrue(target("命中 · 4", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(target("命中 · 3", in: app).waitForExistence(timeout: 10))
         let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         portrait.name = "Probe foreground portrait"
         portrait.lifetime = .keepAlways

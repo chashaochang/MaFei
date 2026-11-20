@@ -54,7 +54,7 @@ internal fun BrowseRoute.shellContext(): BrowseShellContext = when (this) {
     is BrowseManagementDevicesRoute,
     BrowseFeiniuConnectionPreferenceRoute,
     BrowseAppearanceRoute,
-    BrowseGlassStyleRoute,
+    BrowseBottomNavigationSettingsRoute,
     BrowsePlayerSettingsRoute,
     BrowseAddGroupRoute,
     BrowseAboutPrivacyRoute,

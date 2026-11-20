@@ -1,123 +1,58 @@
 package cn.mafei.cmp.common.glass.components
 
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.withSaveLayer
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.GlassStyle
-import cn.mafei.cmp.common.glass.LocalGlassIntensity
-import cn.mafei.cmp.common.glass.LocalGlassStyle
-import cn.mafei.cmp.common.glass.internal.VerticalProgressiveBlurShaderString
-import com.kyant.backdrop.Backdrop
+import cn.mafei.cmp.common.glass.drawFrostedBackdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
-import com.kyant.backdrop.drawPlainBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.runtimeShaderEffect
-import com.kyant.backdrop.isRenderEffectSupported
-import com.kyant.backdrop.isRuntimeShaderSupported
+import com.kyant.backdrop.backdrops.layerBackdrop
 
-/**
- * The catalog's progressive material with a defined SkSL/AGSL gradient and a
- * readable non-shader fallback. The rendered material can be exported so the
- * action buttons refract both the page and the bar beneath them.
- */
+/** Apply the fade after the blur, on a material-only sibling of the toolbar content. */
 internal fun Modifier.progressiveBlur(
-    backdrop: Backdrop,
+    backdrop: GlassBackdrop,
     tint: Color,
-    blurRadius: Dp = 4.dp,
-    tintIntensity: Float = 0.8f,
-    gradientStartFraction: Float = 0.5f,
-    opacity: Float = 1f,
+    tintIntensity: Float,
+    gradientStartFraction: Float,
+    opacity: Float,
     exportedBackdrop: LayerBackdrop? = null,
 ): Modifier {
-    val resolvedTintIntensity = tintIntensity.coerceIn(0f, 1f)
-    val resolvedStart = gradientStartFraction.coerceIn(0f, .999f)
-    val resolvedOpacity = opacity.coerceIn(0f, 1f)
-    if (!isRenderEffectSupported() || !isRuntimeShaderSupported()) {
-        return drawWithCache {
-            val material = Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0f to tint.copy(alpha = resolvedTintIntensity * resolvedOpacity),
-                    resolvedStart to tint.copy(alpha = resolvedTintIntensity * resolvedOpacity),
-                    1f to Color.Transparent,
-                ),
+    if (opacity <= 0f) return this
+    return then(if (exportedBackdrop == null) Modifier else Modifier.layerBackdrop(exportedBackdrop))
+        .drawWithCache {
+            val opaque = Color.Black.copy(alpha = opacity.coerceAtMost(1f))
+            val fade = Brush.verticalGradient(
+                0f to opaque,
+                gradientStartFraction.coerceIn(0f, .999f) to opaque,
+                1f to Color.Transparent,
             )
-            onDrawBehind { drawRect(material) }
-        }
-    }
-    return drawPlainBackdrop(
-        backdrop = backdrop,
-        shape = { RectangleShape },
-        effects = {
-            blur(blurRadius.toPx())
-            runtimeShaderEffect(
-                key = "VerticalProgressiveBlur",
-                shaderString = VerticalProgressiveBlurShaderString,
-                uniformShaderName = "content",
-            ) {
-                setFloatUniform("size", size.width, size.height)
-                setColorUniform("tint", tint)
-                setFloatUniform("tintIntensity", resolvedTintIntensity)
-                setFloatUniform("gradientStartFraction", resolvedStart)
-                setFloatUniform("opacity", resolvedOpacity)
+            val paint = Paint()
+            onDrawWithContent {
+                drawContext.canvas.withSaveLayer(Rect(Offset.Zero, size), paint) {
+                    drawContent()
+                    drawRect(fade, blendMode = BlendMode.DstIn)
+                }
             }
-        },
-        exportedBackdrop = exportedBackdrop,
-    )
+        }
+        .drawFrostedBackdrop(
+            backdrop = backdrop.layer,
+            shape = { RectangleShape },
+            fallbackTint = tint,
+            onDrawSurface = { drawRect(tint.copy(alpha = tintIntensity.coerceIn(0f, 1f))) },
+        )
 }
 
-/**
- * 公开入口：应用层（common/ui、各 feature）只有 [GlassBackdrop]，拿不到模块内部的
- * vendored `Backdrop`，所以渐进模糊必须从这里转发出去。
- *
- * 用途见导航重构：一级/二级页面顶部导航在内容滚动后，要在状态栏区域浮现一条渐进
- * 模糊（`opacity = if (已滚动) 1f else 0f`），不要用普通的半透明色块冒充。
- */
 fun Modifier.mafeiProgressiveBlur(
     backdrop: GlassBackdrop,
     tint: Color,
-    blurRadius: Dp = 4.dp,
-    tintIntensity: Float = 0.8f,
-    gradientStartFraction: Float = 0.5f,
-    opacity: Float = 1f,
-): Modifier = composed {
-    val glassIntensity = LocalGlassIntensity.current
-    when (LocalGlassStyle.current) {
-        GlassStyle.Liquid -> progressiveBlur(
-            backdrop = backdrop.layer,
-            tint = tint,
-            blurRadius = blurRadius * glassIntensity,
-            tintIntensity = tintIntensity,
-            gradientStartFraction = gradientStartFraction,
-            opacity = opacity,
-        )
-
-        GlassStyle.GaussianBlur -> progressiveBlur(
-            backdrop = backdrop.layer,
-            tint = tint,
-            blurRadius = 16.dp,
-            tintIntensity = tintIntensity,
-            gradientStartFraction = gradientStartFraction,
-            opacity = opacity,
-        )
-
-        GlassStyle.Translucent -> drawWithCache {
-            val resolvedOpacity = opacity.coerceIn(0f, 1f)
-            val resolvedTint = tint.copy(alpha = tint.alpha * tintIntensity.coerceIn(0f, 1f) * resolvedOpacity)
-            val start = gradientStartFraction.coerceIn(0f, .999f)
-            val material = Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0f to resolvedTint,
-                    start to resolvedTint,
-                    1f to Color.Transparent,
-                ),
-            )
-            onDrawBehind { drawRect(material) }
-        }
-    }
-}
+    tintIntensity: Float,
+    gradientStartFraction: Float,
+    opacity: Float,
+): Modifier = progressiveBlur(backdrop, tint, tintIntensity, gradientStartFraction, opacity)

@@ -34,18 +34,12 @@ import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.utils.DampedDragAnimation
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.highlight.Highlight
-import com.kyant.backdrop.shadow.InnerShadow
-import com.kyant.backdrop.shadow.Shadow
+import cn.mafei.cmp.common.glass.drawFrostedBackdrop
 import com.kyant.shapes.Capsule
 import kotlinx.coroutines.flow.collectLatest
 
@@ -59,7 +53,6 @@ fun LiquidSlider(
     modifier: Modifier = Modifier,
     onValueChangeFinished: ((Float) -> Unit)? = null,
 ) {
-    val glassIntensity = LocalGlassIntensity.current
     // 判定必须跟随**应用**主题，不是系统外观：应用已经只有深色一套（浅色主题已砍），
     // 之前用 `!isSystemInDarkTheme()` 会在系统处于浅色时把滑杆画成浅色配色（蓝 0xFF0088FF
     // + 浅轨道），与周围深色界面脱节。这里与其它玻璃组件统一用配色方案自身的亮度。
@@ -166,7 +159,7 @@ fun LiquidSlider(
                             .fastCoerceIn(-size.width / 4f, trackWidth - size.width * 3f / 4f) * if (isLtr) 1f else -1f
                 }
                 .then(dampedDragAnimation.modifier)
-                .drawBackdrop(
+                .drawFrostedBackdrop(
                     backdrop = rememberCombinedBackdrop(
                         backdrop.layer,
                         rememberBackdrop(trackBackdrop) { drawBackdrop ->
@@ -179,36 +172,6 @@ fun LiquidSlider(
                         }
                     ),
                     shape = { Capsule() },
-                    effects = {
-                        val progress = dampedDragAnimation.pressProgress
-                        blur(8f.dp.toPx() * (1f - progress) * glassIntensity)
-                        lens(
-                            10f.dp.toPx() * progress,
-                            14f.dp.toPx() * progress,
-                            chromaticAberration = true
-                        )
-                    },
-                    highlight = {
-                        val progress = dampedDragAnimation.pressProgress
-                        Highlight.Ambient.copy(
-                            width = Highlight.Ambient.width / 1.5f,
-                            blurRadius = Highlight.Ambient.blurRadius / 1.5f,
-                            alpha = progress
-                        )
-                    },
-                    shadow = {
-                        Shadow(
-                            radius = 4f.dp,
-                            color = Color.Black.copy(alpha = 0.05f)
-                        )
-                    },
-                    innerShadow = {
-                        val progress = dampedDragAnimation.pressProgress
-                        InnerShadow(
-                            radius = 4f.dp * progress,
-                            alpha = progress
-                        )
-                    },
                     layerBlock = {
                         scaleX = dampedDragAnimation.scaleX
                         scaleY = dampedDragAnimation.scaleY

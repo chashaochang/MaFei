@@ -30,7 +30,7 @@ fun MaFeiGlassPreferences(reduceTransparency: Boolean, content: @Composable () -
 fun AppGlassCard(
     backdrop: GlassBackdrop?,
     modifier: Modifier = Modifier,
-    level: GlassLevel = GlassLevel.Full,
+    level: GlassLevel = GlassLevel.Frosted,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     MaFeiSurface(
@@ -46,7 +46,7 @@ fun AppGlassCard(
 fun AppGlassBar(
     backdrop: GlassBackdrop?,
     modifier: Modifier = Modifier,
-    level: GlassLevel = GlassLevel.Full,
+    level: GlassLevel = GlassLevel.Frosted,
     content: @Composable RowScope.() -> Unit,
 ) {
     MaFeiSurface(
@@ -72,7 +72,7 @@ fun AppGlassDialog(
     title: String,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
-    level: GlassLevel = GlassLevel.Full,
+    level: GlassLevel = GlassLevel.Frosted,
     confirmButton: @Composable () -> Unit,
     dismissButton: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,

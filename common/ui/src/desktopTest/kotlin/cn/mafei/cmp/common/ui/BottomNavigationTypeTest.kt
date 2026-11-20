@@ -18,8 +18,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.mafeiLayout
-import cn.mafei.cmp.common.glass.GlassStyle
-import cn.mafei.cmp.common.glass.GlassStyleScope
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidBottomTab
 import cn.mafei.cmp.common.glass.components.LiquidBottomTabs
@@ -38,18 +36,16 @@ class BottomNavigationTypeTest {
         var selections = 0
         compose.setContent {
             MaFeiTheme {
-                GlassStyleScope(GlassStyle.Translucent) {
-                    val backdrop = rememberGlassBackdrop()
-                    Box(Modifier.size(width.value, 200.dp)) {
-                        Box(Modifier.size(width.value, 200.dp).captureGlassBackdrop(backdrop).background(Color.Red))
-                        LiquidBottomTabs({ selected.value }, { selected.value = it; selections++ }, backdrop,
-                            tabsCount = 3, widthBaselineTabCount = 4, style = style.value,
-                            compactProgress = { 1f }, bottomInset = 24.dp,
-                            modifier = Modifier.align(Alignment.BottomCenter)) {
-                            listOf("首页", "收藏", "我的").forEachIndexed { index, title ->
-                                LiquidBottomTab({ selected.value = index; selections++ }, index = index,
-                                    isSelected = selected.value == index) { Text(title) }
-                            }
+                val backdrop = rememberGlassBackdrop()
+                Box(Modifier.size(width.value, 200.dp)) {
+                    Box(Modifier.size(width.value, 200.dp).captureGlassBackdrop(backdrop).background(Color.Red))
+                    LiquidBottomTabs({ selected.value }, { selected.value = it; selections++ }, backdrop,
+                        tabsCount = 3, widthBaselineTabCount = 4, style = style.value,
+                        compactProgress = { 1f }, bottomInset = 24.dp,
+                        modifier = Modifier.align(Alignment.BottomCenter)) {
+                        listOf("首页", "收藏", "我的").forEachIndexed { index, title ->
+                            LiquidBottomTab({ selected.value = index; selections++ }, index = index,
+                                isSelected = selected.value == index) { Text(title) }
                         }
                     }
                 }

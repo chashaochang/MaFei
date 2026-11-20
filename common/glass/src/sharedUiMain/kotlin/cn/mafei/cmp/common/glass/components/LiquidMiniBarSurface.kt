@@ -16,13 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.LocalGlassIntensity
-import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
-import com.kyant.backdrop.shadow.InnerShadow
-import com.kyant.backdrop.shadow.Shadow
+import cn.mafei.cmp.common.glass.drawFrostedBackdrop
 import com.kyant.shapes.Capsule
 
 /** Optical surface ported from AndroidLiquidGlass' verified MiniBar sample. */
@@ -33,25 +27,13 @@ fun LiquidMiniBarSurface(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val glassIntensity = LocalGlassIntensity.current
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
     Box(
         modifier
-            .drawBackdrop(
+            .drawFrostedBackdrop(
                 backdrop = backdrop.layer,
                 shape = { Capsule() },
-                effects = {
-                    vibrancy()
-                    blur(8.dp.toPx() * glassIntensity)
-                    lens(
-                        16.dp.toPx(),
-                        28.dp.toPx(),
-                        chromaticAberration = true,
-                    )
-                },
-                shadow = { Shadow(alpha = .18f) },
-                innerShadow = { InnerShadow(radius = 5.dp, alpha = .25f) },
                 onDrawSurface = {
                     drawRect(Color.White.copy(alpha = .2f))
                 },

@@ -13,9 +13,6 @@ import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidActionBar
-import cn.mafei.cmp.common.glass.currentGlassStyle
-import cn.mafei.cmp.common.glass.GlassStyle
-import cn.mafei.cmp.common.glass.GlassStyleScope
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyEmptyView
 import cn.mafei.cmp.common.ui.MaFeiActionBarButton
@@ -76,12 +73,6 @@ internal fun EmbeddedWebPage(
     var controlsExpanded by remember(request) { mutableStateOf(true) }
     val safeArea = LocalMaFeiSafeArea.current
     val backdrop = rememberGlassBackdrop()
-    val selectedGlassStyle = currentGlassStyle()
-    val webControlsGlassStyle = if (selectedGlassStyle == GlassStyle.Liquid) {
-        GlassStyle.GaussianBlur
-    } else {
-        selectedGlassStyle
-    }
     val back = { if (browserBack?.invoke() != true) onBack() }
 
     cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = true) { back() }
@@ -146,60 +137,58 @@ internal fun EmbeddedWebPage(
             }
         }
 
-        GlassStyleScope(webControlsGlassStyle) {
-            LiquidActionBar(
-                backdrop = backdrop,
-                topInset = 0.dp,
-                startInset = safeArea.start,
-                endInset = safeArea.end,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = safeArea.bottom),
-                actionCount = if (controlsExpanded) 3 else 1,
-                // Keep the legacy independent floating controls; the full-width
-                // action-bar gradient is not part of the WebEasyTong surface.
-                materialAlpha = 0f,
-                navigation = if (controlsExpanded) ({ buttonBackdrop ->
+        LiquidActionBar(
+            backdrop = backdrop,
+            topInset = 0.dp,
+            startInset = safeArea.start,
+            endInset = safeArea.end,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = safeArea.bottom),
+            actionCount = if (controlsExpanded) 3 else 1,
+            // Keep the legacy independent floating controls; the full-width
+            // action-bar gradient is not part of the WebEasyTong surface.
+            materialAlpha = 0f,
+            navigation = if (controlsExpanded) ({ buttonBackdrop ->
+                MaFeiActionBarButton(
+                    onClick = back,
+                    backdrop = buttonBackdrop,
+                    contentDescription = "网页后退",
+                ) { MaFeiIcon(MaFeiGlyph.Back, color = MaterialTheme.colorScheme.onSurface) }
+            }) else null,
+            title = {
+                if (controlsExpanded) Text(
+                    pageTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            centerTitleOnScreen = false,
+            actions = { buttonBackdrop ->
+                if (controlsExpanded) {
                     MaFeiActionBarButton(
-                        onClick = back,
+                        onClick = onBack,
                         backdrop = buttonBackdrop,
-                        contentDescription = "网页后退",
-                    ) { MaFeiIcon(MaFeiGlyph.Back, color = MaterialTheme.colorScheme.onSurface) }
-                }) else null,
-                title = {
-                    if (controlsExpanded) Text(
-                        pageTitle,
+                        contentDescription = "关闭网页",
+                    ) { MaFeiIcon(MaFeiGlyph.Close, color = MaterialTheme.colorScheme.onSurface) }
+                    MaFeiActionBarButton(
+                        onClick = { browserRefresh?.invoke(); progress = 0 },
+                        backdrop = buttonBackdrop,
+                        contentDescription = "刷新网页",
+                    ) { MaFeiIcon(MaFeiGlyph.Refresh, color = MaterialTheme.colorScheme.onSurface) }
+                }
+                MaFeiActionBarButton(
+                    onClick = { controlsExpanded = !controlsExpanded },
+                    backdrop = buttonBackdrop,
+                    contentDescription = if (controlsExpanded) "收起网页工具栏" else "展开网页工具栏",
+                ) {
+                    MaFeiIcon(
+                        MaFeiGlyph.Chevron,
+                        modifier = Modifier.rotate(if (controlsExpanded) 180f else 0f),
                         color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
-                },
-                centerTitleOnScreen = false,
-                actions = { buttonBackdrop ->
-                    if (controlsExpanded) {
-                        MaFeiActionBarButton(
-                            onClick = onBack,
-                            backdrop = buttonBackdrop,
-                            contentDescription = "关闭网页",
-                        ) { MaFeiIcon(MaFeiGlyph.Close, color = MaterialTheme.colorScheme.onSurface) }
-                        MaFeiActionBarButton(
-                            onClick = { browserRefresh?.invoke(); progress = 0 },
-                            backdrop = buttonBackdrop,
-                            contentDescription = "刷新网页",
-                        ) { MaFeiIcon(MaFeiGlyph.Refresh, color = MaterialTheme.colorScheme.onSurface) }
-                    }
-                    MaFeiActionBarButton(
-                        onClick = { controlsExpanded = !controlsExpanded },
-                        backdrop = buttonBackdrop,
-                        contentDescription = if (controlsExpanded) "收起网页工具栏" else "展开网页工具栏",
-                    ) {
-                        MaFeiIcon(
-                            MaFeiGlyph.Chevron,
-                            modifier = Modifier.rotate(if (controlsExpanded) 180f else 0f),
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                },
-            )
-        }
+                }
+            },
+        )
     }
 }
 

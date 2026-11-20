@@ -12,29 +12,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.utils.DampedDragAnimation
-import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.highlight.Highlight
-import com.kyant.backdrop.shadow.InnerShadow
-import com.kyant.backdrop.shadow.Shadow
+import cn.mafei.cmp.common.glass.drawFrostedBackdrop
 import com.kyant.shapes.Capsule
 
-/**
- * 选中指示器"液滴"：不是画一个色块，而是一层**真玻璃** —— 对身后内容做折射（带色散），
- * 并按下的力度浮现高光、阴影与内阴影。
- *
- * 位移与缩放全部由 [animation]（`DampedDragAnimation`）驱动，也就是底部导航
- * (`LiquidBottomTabs`) 选中态用的同一套：切换时先按一下（放大到 `pressedScale`）、再用阻尼
- * 弹簧滑过去，拖动时按速度做拉伸/压缩。只做 `animateDpAsState` 的平移是没有"液态"感的。
- *
- * 静止态**必须**有可见的表面色（`onDrawSurface` 的 10% 黑/白，按下时淡出）——否则
- * `pressProgress = 0` 时折射半径 ≈ 0、高光 alpha = 0，选中项在静止时完全看不见。
- *
- * 分层要求：调用方必须把液滴画在标签**下面**。`drawBackdrop` 是把折射后的背景铺满整个
- * 形状，画在标签上层会把选中项的文字整个盖掉（只剩一颗空胶囊）。因此拖拽指示器的手势
- * 拿不到事件（标签在上面），按压反馈改由调用方把 [DampedDragAnimation.modifier] 挂到
- * Tab 自己身上触发：按下 `press()`，松手 `release()`。
- */
+/** Animated selection surface; place below the visible labels. */
 @Composable
 fun LiquidSelectionDroplet(
     backdrop: GlassBackdrop,
@@ -56,34 +37,11 @@ fun LiquidSelectionDroplet(
                 translationX = translationXInPx?.invoke(animation.value)
                     ?: animation.value * travelPx
             }
-            .drawBackdrop(
+            .drawFrostedBackdrop(
                 backdrop = backdrop.layer,
                 shape = { Capsule() },
-                effects = {
-                    val progress = animation.pressProgress.coerceAtLeast(.001f)
-                    lens(
-                        10.dp.toPx() * progress,
-                        14.dp.toPx() * progress,
-                        // Keep the capsule's upper/lower surface in the
-                        // refracted image. Without the depth term a uniform
-                        // strip background mostly reads as a scale change,
-                        // even when the droplet itself is large enough.
-                        depthEffect = true,
-                        chromaticAberration = true,
-                    )
-                },
-                highlight = { Highlight.Default.copy(alpha = animation.pressProgress) },
-                shadow = { Shadow(alpha = animation.pressProgress) },
-                innerShadow = {
-                    InnerShadow(
-                        radius = 8.dp * animation.pressProgress,
-                        alpha = animation.pressProgress,
-                    )
-                },
                 // Scale must be applied through drawBackdrop's layerBlock,
-                // not an outer graphicsLayer. The backdrop shader uses this
                 // block to inverse-transform the sampled source; applying it
-                // outside leaves the lens source in the old coordinate space
                 // and visibly pushes text toward the lower-right corner.
                 layerBlock = {
                     // 速度拉伸：横向按速度放大、纵向相应收紧，液滴才有"被甩出去"的感觉。
@@ -95,11 +53,9 @@ fun LiquidSelectionDroplet(
                 },
                 onDrawSurface = {
                     // 与 `LiquidBottomTabs` 的选中液滴一致：静止时是一层 10% 的黑/白，
-                    // 按下过程中淡出，把"实心块"让位给折射 + 高光。
                     drawRect(
                         if (isLightTheme) Color.Black.copy(alpha = .10f)
                         else Color.White.copy(alpha = .10f),
-                        alpha = 1f - animation.pressProgress,
                     )
                     // Match the standard LiquidBottomTabs selection layer:
                     // pressing adds the same subtle dark depth wash beneath

@@ -30,16 +30,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.currentGlassCapability
-import cn.mafei.cmp.common.glass.currentGlassStyle
-import cn.mafei.cmp.common.glass.surfaceAlpha
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
-import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.colorControls
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.highlight.Highlight
+import cn.mafei.cmp.common.glass.drawFrostedBackdrop
+import cn.mafei.cmp.common.glass.frostedAlpha
 import com.kyant.shapes.Capsule
 import com.kyant.shapes.RoundedRectangle
 
@@ -47,10 +41,8 @@ import com.kyant.shapes.RoundedRectangle
  * Port of the upstream catalog's dialog panel
  * (`app/src/commonMain/kotlin/com/kyant/backdrop/catalog/destinations/DialogContent.kt`).
  *
- * Uses the catalog's optical effects with the product's 32dp rounded rectangle:
- * `colorControls` + `blur` + `lens(depthEffect)`, a plain
- * highlight, and equal-width capsule actions — the optional dismiss one a wash
- * of the container, the confirm one filled with [accentColor]. A null [dismissText]
+ * Uses a frosted 32dp panel and equal-width capsule actions. The optional
+ * dismiss action is tinted, and confirm uses [accentColor]. A null [dismissText]
  * omits the secondary action without changing the panel or action styling. The
  * dim behind the panel belongs to the page, so it stays with the caller.
  *
@@ -77,25 +69,15 @@ fun LiquidAlertDialog(
     dismissEnabled: Boolean = true,
     contentSlot: @Composable ColumnScope.() -> Unit = {},
 ) {
-    val glassIntensity = LocalGlassIntensity.current
-    val style = currentGlassStyle()
     val canSample = backdrop != null && currentGlassCapability().blur
     val material = if (!canSample) {
         Modifier.clip(RoundedRectangle(32.dp)).background(containerColor.copy(alpha = 1f))
     } else {
-        Modifier.drawBackdrop(
+        Modifier.drawFrostedBackdrop(
             backdrop = requireNotNull(backdrop).layer,
             shape = { RoundedRectangle(32.dp) },
-            effects = {
-                colorControls(
-                    brightness = if (isLightTheme) .2f else 0f,
-                    saturation = 1.5f,
-                )
-                blur((if (isLightTheme) 16f.dp.toPx() else 8f.dp.toPx()) * glassIntensity)
-                lens(24f.dp.toPx(), 48f.dp.toPx(), depthEffect = true)
-            },
-            highlight = { Highlight.Plain },
-            onDrawSurface = { drawRect(containerColor.copy(alpha = style.surfaceAlpha(containerColor.alpha))) },
+            fallbackTint = containerColor,
+            onDrawSurface = { drawRect(containerColor.copy(alpha = frostedAlpha(containerColor.alpha))) },
         )
     }
     Column(

@@ -115,31 +115,6 @@ internal class RuntimePreferences(
         appearance.save(mode)
     }
 
-    /** Product-wide Liquid Glass strength, persisted as a 0..100 percentage. */
-    suspend fun loadGlassIntensity(): Float {
-        check(!isClosed()) { "Application is closed" }
-        return try {
-            settings.getString(GLASS_INTENSITY_KEY)
-                ?.toIntOrNull()
-                ?.coerceIn(0, 100)
-                ?.div(100f)
-                ?: DEFAULT_GLASS_INTENSITY
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            failureReporter("glass-intensity-read", failure)
-            DEFAULT_GLASS_INTENSITY
-        }
-    }
-
-    suspend fun saveGlassIntensity(value: Float) {
-        check(!isClosed()) { "Application is closed" }
-        settings.putString(
-            GLASS_INTENSITY_KEY,
-            (value.coerceIn(0f, 1f) * 100f).toInt().toString(),
-        )
-    }
-
     /** Whether the home page should render its recommendation carousel. */
     suspend fun loadHomeCarouselVisible(): Boolean {
         check(!isClosed()) { "Application is closed" }
@@ -177,8 +152,6 @@ internal class RuntimePreferences(
 
     /** ArkUI-compatible Feiniu route strategy. Missing/corrupt values are Speed. */
     private companion object {
-        const val GLASS_INTENSITY_KEY = "mafei.ui.liquid-glass-intensity.v1"
-        const val DEFAULT_GLASS_INTENSITY = .5f
         const val HOME_CAROUSEL_VISIBLE_KEY = "mafei.ui.home-carousel-visible.v1"
         const val PLAYER_RENDER_MODE_KEY = "mafei.player.render-mode.v1"
         const val PLAYER_RENDER_MODE_BUFFER = "buffer"

@@ -50,11 +50,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.GlassMaterial
 import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurface
-import cn.mafei.cmp.common.glass.GlassStyle
-import cn.mafei.cmp.common.glass.currentGlassStyle
 import cn.mafei.cmp.common.design_system.MaFeiGlassDefaults
 import cn.mafei.cmp.common.ui.mafeiDismissOnOutsidePointer
 import cn.mafei.cmp.player.api.PlayerContentMode
@@ -291,12 +288,10 @@ internal fun PlayerSidePanel(
                 spec = MaFeiGlassDefaults.spec(GlassRole.PlayerOverlay).copy(
                     tintAlpha = .90f,
                     cornerRadiusDp = 16f,
-                    material = GlassMaterial.Frosted,
                 ),
                 // A lower-alpha style still needs enough luminance to separate
                 // the menu from a pure-black video; blur alone cannot do that.
-                tint = if (currentGlassStyle() == GlassStyle.Translucent) Color(0xFF747986)
-                    else Color(0xFF30333B),
+                tint = Color(0xFF30333B),
                 modifier = Modifier.offset {
                     IntOffset(left.roundToPx(), top.roundToPx())
                 }.width(popupWidth).height(popupHeight)

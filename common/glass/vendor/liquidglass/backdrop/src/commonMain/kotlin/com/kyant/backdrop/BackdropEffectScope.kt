@@ -1,3 +1,4 @@
+// Modified by MaFei: remove runtime shader state.
 package com.kyant.backdrop
 
 import androidx.compose.ui.geometry.Size
@@ -7,7 +8,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 
-sealed interface BackdropEffectScope : Density, RuntimeShaderCache {
+sealed interface BackdropEffectScope : Density {
 
     val size: Size
 
@@ -20,7 +21,7 @@ sealed interface BackdropEffectScope : Density, RuntimeShaderCache {
     var renderEffect: RenderEffect?
 }
 
-internal abstract class BackdropEffectScopeImpl : BackdropEffectScope, RuntimeShaderCache {
+internal abstract class BackdropEffectScopeImpl : BackdropEffectScope {
 
     override var density: Float = 1f
     override var fontScale: Float = 1f
@@ -28,12 +29,6 @@ internal abstract class BackdropEffectScopeImpl : BackdropEffectScope, RuntimeSh
     override var layoutDirection: LayoutDirection = LayoutDirection.Ltr
     override var padding: Float = 0f
     override var renderEffect: RenderEffect? = null
-
-    private val runtimeShaderCache = RuntimeShaderCacheImpl()
-
-    override fun obtainRuntimeShader(key: String, string: String): RuntimeShader {
-        return runtimeShaderCache.obtainRuntimeShader(key, string)
-    }
 
     fun update(scope: DrawScope): Boolean {
         val newDensity = scope.density
@@ -69,6 +64,5 @@ internal abstract class BackdropEffectScopeImpl : BackdropEffectScope, RuntimeSh
         layoutDirection = LayoutDirection.Ltr
         padding = 0f
         renderEffect = null
-        runtimeShaderCache.clear()
     }
 }

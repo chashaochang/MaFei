@@ -333,9 +333,8 @@ internal val DetailActionSelectorSpacing = 12.dp
 
 internal val DetailActionSurfaceSpec = GlassSurfaceSpec(
     role = GlassRole.Overlay,
-    level = GlassLevel.Full,
+    level = GlassLevel.Frosted,
     tintAlpha = .18f,
-    intensity = .86f,
     cornerRadiusDp = 25f,
 )
 

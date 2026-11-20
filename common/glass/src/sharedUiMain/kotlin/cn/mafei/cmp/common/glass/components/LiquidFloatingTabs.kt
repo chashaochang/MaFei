@@ -81,7 +81,6 @@ fun LiquidFloatingTabs(
                 backdrop = backdrop,
                 modifier = Modifier.semantics { this.selected = selected },
                 surfaceColor = surfaceColor,
-                chromaticAberration = true,
                 enablePressEffect = false,
                 height = 36.dp,
                 horizontalPadding = 14.dp,

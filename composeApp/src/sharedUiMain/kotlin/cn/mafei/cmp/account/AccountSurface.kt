@@ -34,7 +34,6 @@ import cn.mafei.cmp.common.design_system.MaFeiSafeArea
 import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassLevel
-import cn.mafei.cmp.common.glass.GlassMaterial
 import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurface
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
@@ -173,7 +172,5 @@ private val MineAccountSheetSurfaceSpec =
         role = GlassRole.Dialog,
         level = GlassLevel.Opaque,
         tintAlpha = 1f,
-        intensity = 0f,
         cornerRadiusDp = MineSheetCornerDp,
-        material = GlassMaterial.Frosted,
     )

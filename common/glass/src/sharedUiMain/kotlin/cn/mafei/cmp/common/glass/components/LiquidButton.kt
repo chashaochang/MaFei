@@ -33,16 +33,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.util.fastCoerceAtMost
 import androidx.compose.ui.util.lerp
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.GlassBlurTokens
-import cn.mafei.cmp.common.glass.GlassStyle
-import cn.mafei.cmp.common.glass.currentGlassStyle
-import cn.mafei.cmp.common.glass.surfaceAlpha
-import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
-import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
+import cn.mafei.cmp.common.glass.drawFrostedBackdrop
+import cn.mafei.cmp.common.glass.frostedAlpha
 import com.kyant.shapes.Capsule
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -59,16 +52,13 @@ fun LiquidButton(
     enablePressEffect: Boolean = true,
     tint: Color = Color.Unspecified,
     surfaceColor: Color = Color.Unspecified,
-    chromaticAberration: Boolean = false,
     height: Dp = 48.dp,
     horizontalPadding: Dp = 16.dp,
     content: @Composable RowScope.() -> Unit
 ) {
-    val glassIntensity = LocalGlassIntensity.current
-    val style = currentGlassStyle()
     val currentTint by rememberUpdatedState(tint)
     val currentSurfaceColor by rememberUpdatedState(surfaceColor)
-    val fallbackSurface by rememberUpdatedState(MaterialTheme.colorScheme.surface.copy(alpha = style.surfaceAlpha(0f)))
+    val fallbackSurface by rememberUpdatedState(MaterialTheme.colorScheme.surface.copy(alpha = frostedAlpha(0f)))
     val animationScope = rememberCoroutineScope()
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -89,18 +79,9 @@ fun LiquidButton(
 
     Row(
         modifier
-            .drawBackdrop(
+            .drawFrostedBackdrop(
                 backdrop = backdrop.layer,
                 shape = { Capsule() },
-                effects = {
-                    vibrancy()
-                    blur(GlassBlurTokens.button.toPx() * glassIntensity)
-                    lens(
-                        12f.dp.toPx(),
-                        24f.dp.toPx(),
-                        chromaticAberration = chromaticAberration,
-                    )
-                },
                 layerBlock = if (pressEffectActive) {
                     {
                         applyLiquidButtonPressTransform(
@@ -112,9 +93,8 @@ fun LiquidButton(
                     null
                 },
                 onDrawSurface = {
-                    if (style != GlassStyle.Liquid) drawRect(fallbackSurface)
+                    drawRect(fallbackSurface)
                     if (currentTint.isSpecified) {
-                        drawRect(currentTint, blendMode = BlendMode.Hue)
                         drawRect(currentTint.copy(alpha = 0.75f))
                     }
                     if (currentSurfaceColor.isSpecified) {

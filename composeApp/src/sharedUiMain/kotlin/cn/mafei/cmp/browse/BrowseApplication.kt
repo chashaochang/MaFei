@@ -43,8 +43,6 @@ internal fun BrowseApplication(
     runtime: ApplicationRuntime,
     session: ApplicationSession,
     busy: Boolean,
-    liquidGlassIntensity: Float,
-    onLiquidGlassIntensityChanged: (Float) -> Unit,
     homeCarouselVisible: State<Boolean>,
     onHomeCarouselVisibleChanged: (Boolean) -> Unit,
     playerRenderMode: PlayerRenderMode,
@@ -65,11 +63,9 @@ internal fun BrowseApplication(
     // passing the primitive directly would leave the entry showing the value
     // captured when it was first pushed and only appear updated after leaving
     // and re-entering the page.
-    val currentLiquidGlassIntensity = rememberUpdatedState(liquidGlassIntensity)
-    val currentLiquidGlassIntensityChanged = rememberUpdatedState(onLiquidGlassIntensityChanged)
     val currentPlayerRenderMode = rememberUpdatedState(playerRenderMode)
     val currentPlayerRenderModeChanged = rememberUpdatedState(onPlayerRenderModeChanged)
-    val bottomNavigationType by runtime.glassStyle.bottomNavigation.collectAsState()
+    val bottomNavigationType by runtime.bottomNavigationSettings.bottomNavigation.collectAsState()
     val browser =
         remember(session) {
             MediaBrowser(
@@ -267,7 +263,6 @@ internal fun BrowseApplication(
             onLogout, authenticationFailure, popMineRoute, feiniu, playback, runtime,
             homeCarouselVisible, onHomeCarouselVisibleChanged, currentPlayerRenderMode,
             currentPlayerRenderModeChanged, playerRenderModeSupported,
-            currentLiquidGlassIntensity, currentLiquidGlassIntensityChanged,
             embeddedWebMemory, onPlayerFullscreenChanged,
         ) {
             val mineContent: @Composable (Modifier) -> Unit = { modifier ->
@@ -315,7 +310,6 @@ internal fun BrowseApplication(
                                         playback,
                                         popMineRoute,
                                         runtime.appearance,
-                                        runtime.glassStyle,
                                         homeCarouselVisible,
                                         onHomeCarouselVisibleChanged,
                                     )
@@ -337,9 +331,9 @@ internal fun BrowseApplication(
                                 NavEntry(route) { ManagementDevicesEntryBinding(route, account, session.media, popMineRoute, runtime.sessions.media) }
                             BrowseFeiniuConnectionPreferenceRoute -> NavEntry(route) { FeiniuConnectionPreferenceEntryBinding(feiniu, popMineRoute) }
                             BrowseAppearanceRoute -> NavEntry(route) { AppearanceEntryBinding(popMineRoute, runtime.appearance) }
-                            BrowseGlassStyleRoute ->
+                            BrowseBottomNavigationSettingsRoute ->
                                 NavEntry(route) {
-                                    GlassStyleEntryBinding(popMineRoute, runtime.glassStyle, currentLiquidGlassIntensity, currentLiquidGlassIntensityChanged)
+                                    BottomNavigationSettingsRoute(runtime.bottomNavigationSettings, onBack = popMineRoute)
                                 }
                             BrowseAddGroupRoute -> NavEntry(route) { AddGroupEntryBinding(popMineRoute) }
                             BrowseAboutPrivacyRoute -> NavEntry(route) { AboutPrivacyEntryBinding(account, popMineRoute, uriHandler, embeddedWebHost) }
@@ -451,7 +445,6 @@ internal fun BrowseApplication(
                     windowDragArea = windowDragArea,
                     onPlayerFullscreenChanged = onPlayerFullscreenChanged,
                     playerWindow = playerWindow,
-                    liquidGlassIntensity = liquidGlassIntensity,
                     onReturnToBrowse = {
                         if (account.returnToEmbeddedWeb) {
                             account.returnToEmbeddedWeb = false

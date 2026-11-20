@@ -8,7 +8,6 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.luminance
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.glass.GlassRenderingEnvironment
-import cn.mafei.cmp.common.glass.currentGlassStyle
 import cn.mafei.cmp.common.glass.rememberGlassRenderHealth
 import cn.mafei.cmp.player.ui.LocalPlayerContentReportSubmitter
 import cn.mafei.cmp.player.ui.LocalPlayerVideoBackdropSource
@@ -19,13 +18,11 @@ internal fun PlayerWindowPresentation(
     owner: Any,
     mediaKey: String,
     title: String,
-    glassIntensity: Float,
     onClose: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     val runtime = LocalApplicationRuntime.current
     val darkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val glassStyle = currentGlassStyle()
     val reportSubmitter = LocalPlayerContentReportSubmitter.current
     val videoBackdrop = LocalPlayerVideoBackdropSource.current
     // Copy only application capabilities and visual preferences. The new root
@@ -38,7 +35,7 @@ internal fun PlayerWindowPresentation(
                 LocalPlayerVideoBackdropSource provides videoBackdrop,
             ) {
                 MaFeiTheme(darkTheme = darkTheme) {
-                    GlassRenderingEnvironment(rememberGlassRenderHealth(), glassIntensity, glassStyle) {
+                    GlassRenderingEnvironment(rememberGlassRenderHealth()) {
                         content()
                     }
                 }

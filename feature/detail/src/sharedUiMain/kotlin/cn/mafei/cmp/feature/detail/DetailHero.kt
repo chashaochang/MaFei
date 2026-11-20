@@ -54,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassLevel
-import cn.mafei.cmp.common.glass.GlassMaterial
 import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurface
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
@@ -375,11 +374,9 @@ private fun DetailMediaBadge(
 
 private val DetailBadgeGlassSpec = GlassSurfaceSpec(
     role = GlassRole.Card,
-    level = GlassLevel.Reduced,
+    level = GlassLevel.Frosted,
     tintAlpha = .56f,
-    intensity = .82f,
     cornerRadiusDp = 6f,
-    material = GlassMaterial.Frosted,
 )
 
 private fun Modifier.featherBottom(startFraction: Float): Modifier =

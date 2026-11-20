@@ -19,8 +19,6 @@ import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import cn.mafei.cmp.common.design_system.MaFeiInsetsDp
 import cn.mafei.cmp.common.design_system.MaFeiWindowFeatures
-import cn.mafei.cmp.common.glass.GlassStyle
-import cn.mafei.cmp.common.glass.GlassStyleScope
 import cn.mafei.cmp.player.api.*
 import kotlin.test.*
 
@@ -34,7 +32,6 @@ class PlayerMenuLayoutTest {
         playerState: MutableState<PlayerState>? = null,
         tracks: List<PlayerTrack> = emptyList(),
         videoColor: Color = Color(0xFF35556B),
-        style: GlassStyle = GlassStyle.Liquid,
         reportSubmitter: PlayerContentReportSubmitter? = null,
     ) {
         rule.setContent { MaFeiTheme {
@@ -42,16 +39,14 @@ class PlayerMenuLayoutTest {
                 LocalMaFeiWindowFeatures provides features,
                 LocalPlayerContentReportSubmitter provides reportSubmitter,
             ) {
-                GlassStyleScope(style) {
-                Box(Modifier.requiredSize(width.dp, height.dp).testTag("playerTestViewport")) {
-                    NowPlayingScreen(NowPlayingMedia("v", "影片", ""), playerState?.value ?: PlayerState(phase = PlayerPhase.Paused),
-                        capabilities = PlayerCapabilities(contentMode = true, speed = true),
-                        onBack = {}, onTogglePlay = {}, onRetry = {}, onSeek = {}, onSpeed = {},
-                        onSelectTrack = { _, _ -> }, fullscreen = fullscreen,
-                        tracks = tracks, onFullscreenRequest = {},
-                        onPictureInPicture = {}, playbackFacts = PlayerPlaybackFacts("影片"),
-                        videoSurface = { Box(it.background(videoColor)) })
-                }
+            Box(Modifier.requiredSize(width.dp, height.dp).testTag("playerTestViewport")) {
+                NowPlayingScreen(NowPlayingMedia("v", "影片", ""), playerState?.value ?: PlayerState(phase = PlayerPhase.Paused),
+                    capabilities = PlayerCapabilities(contentMode = true, speed = true),
+                    onBack = {}, onTogglePlay = {}, onRetry = {}, onSeek = {}, onSpeed = {},
+                    onSelectTrack = { _, _ -> }, fullscreen = fullscreen,
+                    tracks = tracks, onFullscreenRequest = {},
+                    onPictureInPicture = {}, playbackFacts = PlayerPlaybackFacts("影片"),
+                    videoSurface = { Box(it.background(videoColor)) })
                 }
             }
         } }
@@ -154,14 +149,6 @@ class PlayerMenuLayoutTest {
         val pixels = rule.onNodeWithTag("playerMenuPanel").captureToImage().toPixelMap()
         assertTrue(pixels[8, pixels.height / 2].luminance() > .015f,
             "A tablet menu needs a visible surface even when blur samples pure black")
-    }
-
-    @Test fun tabletTranslucentMenuIsAlsoVisibleAgainstBlack() {
-        show(900, 600, true, videoColor = Color.Black, style = GlassStyle.Translucent)
-        rule.onNodeWithContentDescription("更多设置").performClick()
-        rule.mainClock.advanceTimeBy(1000)
-        val pixels = rule.onNodeWithTag("playerMenuPanel").captureToImage().toPixelMap()
-        assertTrue(pixels[8, pixels.height / 2].luminance() > .015f)
     }
 
     @Test fun phoneLandscapeKeepsTheExistingEdgeMenuInsteadOfATabletPopover() {

@@ -17,7 +17,7 @@
 | --- | --- |
 | 应用流程、路由、状态所有权 | [应用架构](composeApp/ARCHITECTURE.md)，导航目录 README |
 | 任意模块的可见 UI、动画、交互（含平台入口） | [唯一 UI 规范](common/ui/UI_POLICY.md)；全部平台遵循已确认的苹果风格，禁止 Material 默认产品外观 |
-| 玻璃材质、采样、降级、渲染性能 | [液态玻璃 Skill](common/glass/SKILL.md) |
+| 高斯模糊材质、采样、降级、渲染性能 | [磨砂材质 Skill](common/glass/SKILL.md) |
 | HarmonyOS 宿主、打包、桥接 | [宿主规则](harmonyApp/AGENTS.md) |
 | 旧版参考或迁移夹具 | [旧版规则](legacy/AGENTS.md)，显式搜索旧版路径 |
 | 文档、参考与验证记录 | [文档策略](docs/README.md) |

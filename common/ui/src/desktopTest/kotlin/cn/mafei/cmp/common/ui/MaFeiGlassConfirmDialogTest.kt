@@ -29,8 +29,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.input.key.Key
-import cn.mafei.cmp.common.glass.GlassStyle
-import cn.mafei.cmp.common.glass.GlassStyleScope
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import kotlin.test.Test
@@ -249,29 +247,26 @@ class MaFeiGlassConfirmDialogTest {
 
     @Test
     fun standardMaterialTracksTheRealBackdropInEveryStyle() {
-        val style = mutableStateOf(GlassStyle.Liquid)
         val dark = mutableStateOf(true)
         val source = mutableStateOf(Color.Red)
         composeRule.setContent {
             MaFeiTheme(darkTheme = dark.value) {
-                GlassStyleScope(style.value) {
-                    Box(Modifier.size(390.dp, 640.dp)) {
-                        val backdrop = rememberGlassBackdrop()
-                        Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop).background(source.value))
-                        MaFeiGlassConfirmDialog("账号验证", "当前账号登录已过期，请重新登录", "重新登录", "取消",
-                            {}, {}, backdrop)
-                    }
+                Box(Modifier.size(390.dp, 640.dp)) {
+                    val backdrop = rememberGlassBackdrop()
+                    Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop).background(source.value))
+                    MaFeiGlassConfirmDialog("账号验证", "当前账号登录已过期，请重新登录", "重新登录", "取消",
+                        {}, {}, backdrop)
                 }
             }
         }
-        for (material in GlassStyle.entries) for (isDark in listOf(true, false)) {
-            composeRule.runOnIdle { style.value = material; dark.value = isDark; source.value = Color.Red }
+        for (isDark in listOf(true, false)) {
+            composeRule.runOnIdle { dark.value = isDark; source.value = Color.Red }
             val panel = composeRule.onNodeWithTag("mafeiGlassConfirmCard")
             val before = panel.captureToImage().toPixelMap().let { it[it.width / 2, 12] }
             composeRule.runOnIdle { source.value = Color.Cyan }
             val after = panel.captureToImage().toPixelMap().let { it[it.width / 2, 12] }
             assertTrue(abs(before.red - after.red) + abs(before.blue - after.blue) > .15f,
-                "$material/$isDark must not replace the page backdrop with an opaque panel: $before -> $after")
+                "dark=$isDark must not replace the page backdrop with an opaque panel: $before -> $after")
             composeRule.onNodeWithText("重新登录").assertIsDisplayed()
         }
     }

@@ -26,8 +26,6 @@ import androidx.compose.ui.test.up
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.mafeiLayout
-import cn.mafei.cmp.common.glass.GlassStyle
-import cn.mafei.cmp.common.glass.GlassStyleScope
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
@@ -38,7 +36,6 @@ import kotlin.test.assertTrue
 class MaFeiDrawerPresentationTest {
     @get:org.junit.Rule val compose = createComposeRule()
     private val sceneColor = mutableStateOf(Color.Red)
-    private val style = mutableStateOf(GlassStyle.Liquid)
     private val dark = mutableStateOf(true)
     private val portrait = mutableStateOf(true)
     private var surfaceColor = Color.Unspecified
@@ -47,41 +44,31 @@ class MaFeiDrawerPresentationTest {
         MaFeiNavItem("favorite", "收藏", MaFeiGlyph.Favorite),
     )
 
-    @Test fun drawerAndPersistentSidebarShareTheSameLiveMaterialInEveryStyle() {
+    @Test fun drawerAndPersistentSidebarShareTheSameLiveMaterialInBothThemes() {
         mount()
-        val landscapeSamples = mutableMapOf<Triple<GlassStyle, Boolean, Color>, Color>()
+        val landscapeSamples = mutableMapOf<Pair<Boolean, Color>, Color>()
         for (isPortrait in listOf(false, true)) {
             compose.runOnIdle { portrait.value = isPortrait }
             if (isPortrait) {
                 compose.onNodeWithContentDescription("展开侧边栏").performClick()
             }
             compose.waitForIdle()
-            for (material in GlassStyle.entries) for (isDark in listOf(true, false)) {
-                compose.runOnIdle { style.value = material; dark.value = isDark }
+            for (isDark in listOf(true, false)) {
+                compose.runOnIdle { dark.value = isDark }
                 for (scene in listOf(Color.Red, Color.Blue)) {
                     compose.runOnIdle { sceneColor.value = scene }
                     val pixels = compose.onRoot().captureToImage().toPixelMap()
                     // Empty panel inset, clear of navigation labels and its edge.
                     val sample = pixels[8, pixels.height / 2]
-                    val alpha = when (material) {
-                        GlassStyle.Translucent -> .60f
-                        GlassStyle.GaussianBlur -> .42f
-                        GlassStyle.Liquid -> .16f
-                    }
-                    // The translucent fallback has no backdrop, so its ordinary
-                    // alpha composition includes the drawer scrim underneath.
-                    val behind = if (isPortrait && material == GlassStyle.Translucent) {
-                        Color.Black.copy(alpha = .5f).compositeOver(scene)
-                    } else scene
-                    val expected = surfaceColor.copy(alpha = alpha).compositeOver(behind)
-                    val key = Triple(material, isDark, scene)
+                    val expected = surfaceColor.copy(alpha = .42f).compositeOver(scene)
+                    val key = isDark to scene
                     assertColor(expected, sample, "$key portrait=$isPortrait")
-                    if (isPortrait && material != GlassStyle.Translucent) {
+                    if (isPortrait) {
                         assertColor(landscapeSamples.getValue(key), sample, "orientation parity: $key")
                     } else if (!isPortrait) {
                         landscapeSamples[key] = sample
                     }
-                    if (material == GlassStyle.Liquid && scene == Color.Blue) {
+                    if (scene == Color.Blue) {
                         capture("sidebar-${if (isPortrait) "portrait" else "landscape"}-${if (isDark) "dark" else "light"}")
                     }
                 }
@@ -188,18 +175,16 @@ class MaFeiDrawerPresentationTest {
         compose.setContent {
             MaFeiTheme(darkTheme = dark.value) {
                 surfaceColor = MaterialTheme.colorScheme.surface
-                GlassStyleScope(style.value) {
-                    val width = if (portrait.value) 740f else 1000f
-                    val height = if (portrait.value) 1000f else 740f
-                    Box(Modifier.size(width.dp, height.dp)) {
-                        MaFeiAdaptiveShell(
-                            layout = mafeiLayout(width, height),
-                            destinations = destinations, selectedDestination = "home", onDestination = {},
-                            libraries = emptyList(), selectedLibrary = null, onLibrary = {}, accountLabel = "测试",
-                            background = { Box(Modifier.fillMaxSize().background(sceneColor.value)) },
-                            accountActions = {}, scene = {}, overlay = {},
-                        )
-                    }
+                val width = if (portrait.value) 740f else 1000f
+                val height = if (portrait.value) 1000f else 740f
+                Box(Modifier.size(width.dp, height.dp)) {
+                    MaFeiAdaptiveShell(
+                        layout = mafeiLayout(width, height),
+                        destinations = destinations, selectedDestination = "home", onDestination = {},
+                        libraries = emptyList(), selectedLibrary = null, onLibrary = {}, accountLabel = "测试",
+                        background = { Box(Modifier.fillMaxSize().background(sceneColor.value)) },
+                        accountActions = {}, scene = {}, overlay = {},
+                    )
                 }
             }
         }

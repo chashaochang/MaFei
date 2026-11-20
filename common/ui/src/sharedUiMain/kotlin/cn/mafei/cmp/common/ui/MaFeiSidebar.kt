@@ -87,16 +87,14 @@ internal fun SidebarPanel(
     MaFeiSurface(
         GlassSurfaceSpec(
             GlassRole.Navigation,
-            GlassLevel.Full,
+            GlassLevel.Frosted,
             // 整块侧栏（含顶部 logo 区与底部账号区）就是这一种材质，顶/底不再
             // 叠任何额外玻璃层；滚进来的列表项由滚动区的上下渐隐淡出。
             tintAlpha = .16f,
-            intensity = 1f,
             // 贴窗口边缘的整块面板：不要圆角、不要液态玻璃的折射与高光描边，只做高斯模糊
             // + 染色。折射会在四条边上各画一条可见的线（读成"浮起来的卡片"），而整屏高度
             // 的折射没有视觉收益；这一栏与内容之间只留一条分界线（见下）。
             cornerRadiusDp = 0f,
-            material = GlassMaterial.Frosted,
         ),
         modifier.fillMaxHeight(),
         // Both presentations use the same page material; the drawer scrim only

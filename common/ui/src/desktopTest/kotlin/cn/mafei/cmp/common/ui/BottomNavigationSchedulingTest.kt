@@ -10,8 +10,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.BottomNavigationType
 import cn.mafei.cmp.common.design_system.MaFeiTheme
-import cn.mafei.cmp.common.glass.GlassStyle
-import cn.mafei.cmp.common.glass.GlassStyleScope
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -130,29 +128,27 @@ class BottomNavigationSchedulingTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             MaFeiTheme {
-                GlassStyleScope(GlassStyle.Translucent) {
-                    CompositionLocalProvider(LocalMaFeiTabInteractionState provides interaction) {
-                        LaunchedEffect(route) {
-                            interaction.awaitIdle()
-                            refreshed += route
-                        }
-                        Box(Modifier.size(390.dp, 200.dp)) {
-                            BottomNavigationLayer(
-                                destinations = listOf(
-                                    MaFeiNavItem("home", "首页", MaFeiGlyph.Home),
-                                    MaFeiNavItem("library", "媒体库", MaFeiGlyph.Library),
-                                    MaFeiNavItem("mine", "我的", MaFeiGlyph.Account),
-                                ),
-                                selectedDestination = route,
-                                onDestination = {
-                                    route = it
-                                    navigated += it
-                                    afterNavigation(it)
-                                },
-                                backdrop = rememberGlassBackdrop(), compactProgress = { 0f },
-                                type = BottomNavigationType.Floating, bottomInset = 0.dp,
-                            )
-                        }
+                CompositionLocalProvider(LocalMaFeiTabInteractionState provides interaction) {
+                    LaunchedEffect(route) {
+                        interaction.awaitIdle()
+                        refreshed += route
+                    }
+                    Box(Modifier.size(390.dp, 200.dp)) {
+                        BottomNavigationLayer(
+                            destinations = listOf(
+                                MaFeiNavItem("home", "首页", MaFeiGlyph.Home),
+                                MaFeiNavItem("library", "媒体库", MaFeiGlyph.Library),
+                                MaFeiNavItem("mine", "我的", MaFeiGlyph.Account),
+                            ),
+                            selectedDestination = route,
+                            onDestination = {
+                                route = it
+                                navigated += it
+                                afterNavigation(it)
+                            },
+                            backdrop = rememberGlassBackdrop(), compactProgress = { 0f },
+                            type = BottomNavigationType.Floating, bottomInset = 0.dp,
+                        )
                     }
                 }
             }

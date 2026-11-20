@@ -56,7 +56,7 @@ class ApplicationRuntime(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     val appearance = AppearanceStore(settings)
-    val glassStyle = GlassStyleStore(settings)
+    val bottomNavigationSettings = BottomNavigationSettingsStore(settings)
     private val closeMutex = Mutex()
     var isClosed: Boolean = false
         private set
@@ -309,8 +309,6 @@ class ApplicationRuntime(
     suspend fun saveSearchHistory(items: List<String>) = preferences.saveSearchHistory(items)
     suspend fun loadAppearanceMode(): String? = preferences.loadAppearanceMode()
     suspend fun saveAppearanceMode(value: String) = preferences.saveAppearanceMode(value)
-    suspend fun loadGlassIntensity(): Float = preferences.loadGlassIntensity()
-    suspend fun saveGlassIntensity(value: Float) = preferences.saveGlassIntensity(value)
     suspend fun loadHomeCarouselVisible(): Boolean = preferences.loadHomeCarouselVisible()
     suspend fun saveHomeCarouselVisible(value: Boolean) = preferences.saveHomeCarouselVisible(value)
     suspend fun loadPlayerRenderMode(): String = preferences.loadPlayerRenderMode()

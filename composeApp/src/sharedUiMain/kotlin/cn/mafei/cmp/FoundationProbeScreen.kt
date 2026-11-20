@@ -32,7 +32,7 @@ import mafei.composeapp.generated.resources.probe_resource_status
 /** Stage 1 development entry, not a production Home or runtime acceptance claim. */
 @Composable
 fun FoundationProbeScreen(onThemeChanged: (Boolean) -> Unit = {}, sessionStatus: String = "") {
-    var level by rememberSaveable { mutableStateOf(GlassLevel.Full.name) }
+    var level by rememberSaveable { mutableStateOf(GlassLevel.Frosted.name) }
     var dialog by rememberSaveable { mutableStateOf(false) }
     var reduceTransparency by rememberSaveable { mutableStateOf(false) }
     var taps by rememberSaveable { mutableStateOf(0) }
@@ -110,12 +110,11 @@ private fun ProbeControls(level: String, width: String, onLevel: (String) -> Uni
             GlassLevel.entries.forEach { option ->
                 FilterChip(selected = level == option.name, onClick = { onLevel(option.name) },
                     label = { Text(when (option) {
-                        GlassLevel.Full -> "完整玻璃"
-                        GlassLevel.Reduced -> "简化玻璃"
+                        GlassLevel.Frosted -> "高斯模糊"
                         GlassLevel.Opaque -> "实体背景"
                     }) }, modifier = Modifier.fillMaxWidth())
             }
-            Text("滚动彩色样本，观察底部浮层的模糊与折射。简化档关闭折射，实体档完全不透明；能力不足时自动降级。",
+            Text("滚动彩色样本，观察高斯模糊与实体背景的区别。模糊不可用时自动降级。",
                 style = MaterialTheme.typography.bodyMedium)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("减少透明度", Modifier.weight(1f))
@@ -170,7 +169,7 @@ private fun ProbeGlassViewport(level: String, reduceTransparency: Boolean, taps:
                                modifier: Modifier, scrollState: LazyListState,
                                barExpanded: Boolean, onToggleBar: () -> Unit, content: LazyListScope.() -> Unit) {
     val backdrop = rememberGlassBackdrop()
-    val requested = GlassLevel.valueOf(level)
+    val requested = GlassLevel.entries.firstOrNull { it.name == level } ?: GlassLevel.Frosted
     val spec = MaFeiGlassDefaults.spec(GlassRole.Navigation, requested, reduceTransparency)
     val resolved = resolveGlassLevel(spec.level, currentGlassCapability(), hasBackdrop = true)
     val density = LocalDensity.current
@@ -193,7 +192,7 @@ private fun ProbeGlassViewport(level: String, reduceTransparency: Boolean, taps:
             Column(Modifier.weight(1f).animateContentSize(animationSpec = tween(220))
                 .clickable(role = Role.Button, onClickLabel = if (barExpanded) "收起说明" else "展开说明",
                     onClick = onToggleBar), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(if (barExpanded) "液态玻璃 · 收起说明" else "液态玻璃 · 展开说明", style = MaterialTheme.typography.titleMedium)
+                Text(if (barExpanded) "磨砂材质 · 收起说明" else "磨砂材质 · 展开说明", style = MaterialTheme.typography.titleMedium)
                 if (barExpanded) Text("请求 $requested → 能力档位 $resolved", style = MaterialTheme.typography.labelMedium)
             }
             TextButton(onClick = onTap) { Text("命中 · $taps") }
@@ -206,7 +205,7 @@ private fun ProbeGlassComparison(reduceTransparency: Boolean) {
     val backdrop = rememberGlassBackdrop()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("同屏材质对照", style = MaterialTheme.typography.titleLarge)
-        Text("以下卡片独立展示三档；底部浮层由控制区切换。", style = MaterialTheme.typography.bodyMedium)
+        Text("以下卡片对比两种材质；底部浮层由控制区切换。", style = MaterialTheme.typography.bodyMedium)
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             ProbePattern(Modifier.matchParentSize().captureGlassBackdrop(backdrop))
             if (maxWidth >= 600.dp) {

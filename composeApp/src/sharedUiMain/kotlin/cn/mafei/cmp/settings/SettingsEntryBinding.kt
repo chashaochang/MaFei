@@ -15,7 +15,6 @@ internal fun SettingsEntryBinding(
     playback: SessionPlaybackRuntime?,
     popMineRoute: () -> Unit,
     appearanceStore: AppearanceStore,
-    glassStyleStore: GlassStyleStore,
     homeCarouselVisible: State<Boolean>,
     onHomeCarouselVisibleChanged: (Boolean) -> Unit,
 ) {
@@ -26,13 +25,12 @@ internal fun SettingsEntryBinding(
                 account.mineBackStack += BrowseAppearanceRoute
             }
         },
-        onOpenGlassStyleSettings = {
-            if (account.mineBackStack.lastOrNull() != BrowseGlassStyleRoute) {
-                account.mineBackStack += BrowseGlassStyleRoute
+        onOpenBottomNavigationSettings = {
+            if (account.mineBackStack.lastOrNull() != BrowseBottomNavigationSettingsRoute) {
+                account.mineBackStack += BrowseBottomNavigationSettingsRoute
             }
         },
         appearanceTitle = appearanceStore.state.collectAsState().value.title,
-        glassStyleTitle = glassStyleStore.state.collectAsState().value.title,
         feiniuRoutePreferenceTitle =
             if (session.selection.provider == ProviderKind.Feiniu) {
                 feiniu.feiniuConnectionPreference.title

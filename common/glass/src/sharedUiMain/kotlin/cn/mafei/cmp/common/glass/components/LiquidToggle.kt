@@ -35,18 +35,12 @@ import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.lerp
 import androidx.compose.material3.MaterialTheme
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.utils.DampedDragAnimation
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.highlight.Highlight
-import com.kyant.backdrop.shadow.InnerShadow
-import com.kyant.backdrop.shadow.Shadow
+import cn.mafei.cmp.common.glass.drawFrostedBackdrop
 import com.kyant.shapes.Capsule
 import kotlinx.coroutines.flow.collectLatest
 
@@ -78,7 +72,6 @@ fun LiquidToggle(
     } else {
         Color(0xFF787880).copy(alpha = .36f)
     }
-    val glassIntensity = LocalGlassIntensity.current
     val selectedState by rememberUpdatedState(selected)
     val onSelectState by rememberUpdatedState(onSelect)
 
@@ -170,7 +163,7 @@ fun LiquidToggle(
                         lerp(-padding, -(padding + dragWidth), value)
                     }
                 }
-                .drawBackdrop(
+                .drawFrostedBackdrop(
                     backdrop = rememberCombinedBackdrop(
                         backdrop.layer,
                         rememberBackdrop(trackBackdrop) { drawBackdrop ->
@@ -182,30 +175,6 @@ fun LiquidToggle(
                         },
                     ),
                     shape = { Capsule() },
-                    effects = {
-                        val progress = dampedDragAnimation.pressProgress
-                        blur(8f.dp.toPx() * (1f - progress) * glassIntensity)
-                        lens(
-                            5f.dp.toPx() * progress,
-                            10f.dp.toPx() * progress,
-                            chromaticAberration = true,
-                        )
-                    },
-                    highlight = {
-                        val progress = dampedDragAnimation.pressProgress
-                        Highlight.Ambient.copy(
-                            width = Highlight.Ambient.width / 1.5f,
-                            blurRadius = Highlight.Ambient.blurRadius / 1.5f,
-                            alpha = progress,
-                        )
-                    },
-                    shadow = {
-                        Shadow(radius = 4f.dp, color = Color.Black.copy(alpha = .05f))
-                    },
-                    innerShadow = {
-                        val progress = dampedDragAnimation.pressProgress
-                        InnerShadow(radius = 4f.dp * progress, alpha = progress)
-                    },
                     layerBlock = {
                         scaleX = dampedDragAnimation.scaleX
                         scaleY = dampedDragAnimation.scaleY

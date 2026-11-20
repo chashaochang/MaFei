@@ -36,11 +36,11 @@ tap('浅色');
 requireText('深色');
 tap('深色');
 requireText('浅色');
-tap('液态玻璃 · 收起说明');
-requireText('液态玻璃 · 展开说明');
-tap('液态玻璃 · 展开说明');
-requireText('液态玻璃 · 收起说明');
-for (const [index, material] of ['完整玻璃', '简化玻璃', '实体背景'].entries()) {
+tap('磨砂材质 · 收起说明');
+requireText('磨砂材质 · 展开说明');
+tap('磨砂材质 · 展开说明');
+requireText('磨砂材质 · 收起说明');
+for (const [index, material] of ['高斯模糊', '实体背景'].entries()) {
   tap(material);
   tap(`命中 · ${index}`);
   requireText(`命中 · ${index + 1}`);
@@ -53,12 +53,12 @@ try {
   adb('shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0');
   adb('shell', 'settings', 'put', 'system', 'user_rotation', '1');
   if (!tree().includes('rotation="1"')) throw new Error('Landscape rotation not observed');
+  requireText('命中 · 2');
+  tap('命中 · 2');
   requireText('命中 · 3');
-  tap('命中 · 3');
-  requireText('命中 · 4');
   adb('shell', 'settings', 'put', 'system', 'user_rotation', '0');
   if (!tree().includes('rotation="0"')) throw new Error('Portrait rotation not observed');
-  requireText('命中 · 4');
+  requireText('命中 · 3');
 } finally {
   for (const [key, value] of rotationSettings) {
     if (value === 'null') adb('shell', 'settings', 'delete', 'system', key);
@@ -68,15 +68,15 @@ try {
 tap('检查弹层');
 requireText('弹层可读性检查');
 adb('shell', 'input', 'keyevent', '4');
-requireText('命中 · 4');
+requireText('命中 · 3');
 tap('模拟特效熔断');
 requireText('已熔断 · 实体回退');
-tap('完整玻璃');
-requireText('请求 Full → 能力档位 Opaque');
-tap('命中 · 4');
-requireText('命中 · 5');
+tap('高斯模糊');
+requireText('请求 Frosted → 能力档位 Opaque');
+tap('命中 · 3');
+requireText('命中 · 4');
 adb('shell', 'input', 'keyevent', '3');
 adb('shell', 'am', 'start', '-W', '-n', `${packageName}/cn.mafei.cmp.MainActivity`);
-requireText('命中 · 5');
+requireText('命中 · 4');
 requireText('已熔断 · 实体回退');
 console.log('PASS: Android probe theme, materials, rotation, real taps, dialog back, simulated fallback and foreground round-trip');

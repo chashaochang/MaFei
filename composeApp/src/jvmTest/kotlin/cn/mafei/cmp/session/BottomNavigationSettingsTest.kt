@@ -1,7 +1,6 @@
 package cn.mafei.cmp.session
 
 import cn.mafei.cmp.common.design_system.BottomNavigationType
-import cn.mafei.cmp.common.glass.GlassStyle
 import cn.mafei.cmp.core.storage_api.StorageUnavailableException
 import cn.mafei.cmp.storage.DocumentSettingsStorage
 import cn.mafei.cmp.storage.SettingsDocumentBackend
@@ -20,31 +19,32 @@ class BottomNavigationSettingsTest {
 
     @Test fun missingOrUnknownPreferenceKeepsTheExistingFloatingNavigation(): Unit = runBlocking {
         val settings = DocumentSettingsStorage(Document())
-        val store = GlassStyleStore(settings)
+        val store = BottomNavigationSettingsStore(settings)
         store.load()
         assertEquals(BottomNavigationType.Floating, store.bottomNavigation.value)
-        settings.putString(GlassStyleStore.NAVIGATION_KEY, "unknown")
+        settings.putString(BottomNavigationSettingsStore.NAVIGATION_KEY, "unknown")
         store.load()
         assertEquals(BottomNavigationType.Floating, store.bottomNavigation.value)
     }
 
-    @Test fun bothChoicesSurviveReloadWithoutChangingMaterialOrAccounts(): Unit = runBlocking {
+    @Test fun bothChoicesSurviveReloadWithoutChangingOldMaterialOrAccounts(): Unit = runBlocking {
         val document = Document()
         val settings = DocumentSettingsStorage(document)
         settings.putString("account.fixture", "unchanged")
-        GlassStyleStore(settings).save(GlassStyle.GaussianBlur)
+        settings.putString("mafei.ui.glass-style.v1", "liquid")
         for (type in BottomNavigationType.entries) {
-            GlassStyleStore(settings).saveBottomNavigation(type)
-            val reloaded = GlassStyleStore(DocumentSettingsStorage(document))
-            assertEquals(GlassStyle.GaussianBlur, reloaded.load())
+            BottomNavigationSettingsStore(settings).saveBottomNavigation(type)
+            val reloaded = BottomNavigationSettingsStore(DocumentSettingsStorage(document))
+            reloaded.load()
             assertEquals(type, reloaded.bottomNavigation.value)
         }
         assertEquals("unchanged", settings.getString("account.fixture"))
+        assertEquals("liquid", settings.getString("mafei.ui.glass-style.v1"))
     }
 
     @Test fun failedWriteDoesNotPublishAChoiceThatWasNotSaved(): Unit = runBlocking {
         val document = Document()
-        val store = GlassStyleStore(DocumentSettingsStorage(document))
+        val store = BottomNavigationSettingsStore(DocumentSettingsStorage(document))
         document.fail = true
         assertFailsWith<StorageUnavailableException> { store.saveBottomNavigation(BottomNavigationType.Bar) }
         assertEquals(BottomNavigationType.Floating, store.bottomNavigation.value)

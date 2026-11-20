@@ -8,7 +8,7 @@ import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 object MaFeiGlassDefaults {
     fun spec(
         role: GlassRole,
-        level: GlassLevel = GlassLevel.Full,
+        level: GlassLevel = GlassLevel.Frosted,
         reduceTransparency: Boolean = false,
     ): GlassSurfaceSpec = GlassSurfaceSpec(
         role = role,

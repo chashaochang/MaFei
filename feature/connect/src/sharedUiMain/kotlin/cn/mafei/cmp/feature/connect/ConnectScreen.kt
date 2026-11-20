@@ -107,9 +107,8 @@ import org.jetbrains.compose.resources.painterResource
  */
 private val LoginGlassSpec = GlassSurfaceSpec(
     role = GlassRole.Dialog,
-    level = GlassLevel.Full,
+    level = GlassLevel.Frosted,
     tintAlpha = .42f,
-    intensity = 1f,
     cornerRadiusDp = 28f,
 )
 
@@ -585,9 +584,8 @@ private fun ConnectField(
         backdrop = backdrop,
         spec = GlassSurfaceSpec(
             role = GlassRole.Content,
-            level = GlassLevel.Full,
+            level = GlassLevel.Frosted,
             tintAlpha = .20f,
-            intensity = .78f,
             cornerRadiusDp = 14f,
         ),
         tint = Color.Black,

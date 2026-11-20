@@ -187,9 +187,8 @@ fun SearchScreen(
                                         backdrop = backdrop,
                                         spec = GlassSurfaceSpec(
                                             role = GlassRole.Overlay,
-                                            level = GlassLevel.Reduced,
+                                            level = GlassLevel.Frosted,
                                             tintAlpha = .18f,
-                                            intensity = .72f,
                                             cornerRadiusDp = 18f,
                                         ),
                                         tint = MaterialTheme.colorScheme.surfaceVariant,
@@ -354,9 +353,8 @@ private fun SearchField(
         backdrop = backdrop,
         spec = GlassSurfaceSpec(
             role = GlassRole.Overlay,
-            level = GlassLevel.Full,
+            level = GlassLevel.Frosted,
             tintAlpha = .22f,
-            intensity = .92f,
             cornerRadiusDp = 24f,
         ),
         tint = MaterialTheme.colorScheme.surface,

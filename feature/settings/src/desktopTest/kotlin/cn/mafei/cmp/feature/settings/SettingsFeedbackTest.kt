@@ -13,7 +13,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.mafeiLayout
-import cn.mafei.cmp.common.glass.GlassStyle
 import cn.mafei.cmp.core.domain.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,16 +30,16 @@ class SettingsFeedbackTest {
                 Box(Modifier.size(390.dp, 700.dp)) {
                     if (appearance.value) AppearanceScreen(
                         onBack = {}, error = error.value, onSelect = { saves++ },
-                    ) else GlassStyleScreen(
-                        onBack = {}, style = GlassStyle.GaussianBlur, error = error.value,
-                        onSelectStyle = { saves++ }, onSelectBottomNavigation = { saves++ },
+                    ) else BottomNavigationSettingsScreen(
+                        onBack = {}, error = error.value,
+                        onSelectBottomNavigation = { saves++ },
                     )
                 }
             }
         }
         for (isAppearance in listOf(false, true)) {
             rule.runOnIdle { appearance.value = isAppearance; error.value = null }
-            val choice = rule.onNodeWithContentDescription(if (isAppearance) "深色" else "高斯模糊")
+            val choice = rule.onNodeWithContentDescription(if (isAppearance) "深色" else "悬浮")
             val before = choice.assertIsSelected().fetchSemanticsNode().boundsInRoot
             rule.runOnIdle { error.value = "无法保存偏好，请重试" }
             rule.onNodeWithTag("mafeiGlassConfirmCard").assertExists()

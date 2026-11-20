@@ -70,7 +70,6 @@ import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.ui.LocalMaFeiNavigationChrome
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassLevel
-import cn.mafei.cmp.common.glass.GlassMaterial
 import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurface
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
@@ -443,9 +442,7 @@ internal val OverviewSheetSurfaceSpec = GlassSurfaceSpec(
     role = GlassRole.Dialog,
     level = GlassLevel.Opaque,
     tintAlpha = 1f,
-    intensity = 0f,
     cornerRadiusDp = 24f,
-    material = GlassMaterial.Frosted,
 )
 
 private fun legacyOverviewPreview(

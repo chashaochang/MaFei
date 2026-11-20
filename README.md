@@ -69,12 +69,10 @@ MaFei 是一款面向个人媒体库的独立第三方客户端。连接自己�
   <tr>
     <th align="center">电影详情</th>
     <th align="center">剧集与分季</th>
-    <th align="center">风格设置</th>
   </tr>
   <tr>
     <td align="center"><a href="screenshots/current/phone-movie.webp"><img src="screenshots/current/phone-movie.webp" width="200" alt="手机：电影元数据、播放入口、音轨字幕与演职人员；已裁去文件信息区域" /></a></td>
     <td align="center"><a href="screenshots/current/phone-series.webp"><img src="screenshots/current/phone-series.webp" width="200" alt="手机：武林外传剧集详情与分季入口" /></a></td>
-    <td align="center"><a href="screenshots/current/phone-style.webp"><img src="screenshots/current/phone-style.webp" width="200" alt="手机：半透明、高斯模糊、液态玻璃与底部导航风格选项" /></a></td>
   </tr>
 </table>
 

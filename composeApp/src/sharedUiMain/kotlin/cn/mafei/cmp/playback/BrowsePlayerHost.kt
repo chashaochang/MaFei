@@ -38,7 +38,6 @@ internal fun BrowsePlayerHost(
     onPlayerFullscreenChanged: (Boolean) -> Unit,
     onReturnToBrowse: () -> Unit,
     playerWindow: PlayerWindowState?,
-    liquidGlassIntensity: Float,
 ) {
     val scope = rememberCoroutineScope()
     val playback = player.playback
@@ -176,7 +175,6 @@ internal fun BrowsePlayerHost(
                 owner = player,
                 mediaKey = playerMedia.id.value,
                 title = playerMedia.title,
-                glassIntensity = liquidGlassIntensity,
                 onClose = close,
                 content = content,
             )
