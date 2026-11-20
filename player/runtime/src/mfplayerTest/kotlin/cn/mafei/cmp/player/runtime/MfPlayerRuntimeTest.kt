@@ -100,6 +100,21 @@ class MfPlayerRuntimeTest {
         runCurrent()
     }
 
+    @kotlin.test.Test
+    fun sidecarIsNotGivenToNativeEngineWhenAppOverlayOwnsIt() = runTest {
+        val engine = Engine()
+        val runtime = MfPlayerRuntime(PlayerCapabilities(), { engine }, nativeExternalSubtitles = false,
+            hostDispatcher = StandardTestDispatcher(testScheduler))
+        val resource = PlayableResource("id", "https://media.invalid/movie", subtitleUrl = "https://media.invalid/en.srt")
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), resource))
+        runCurrent()
+        kotlin.test.assertTrue(checkNotNull(engine.source).externalSubtitles.isEmpty())
+        kotlin.test.assertEquals(listOf(PlayerExternalSubtitle(resource.subtitleUrl!!, isDefault = true)),
+            resource.toSdkSource().externalSubtitles)
+        runtime.execute(RuntimeCommand.Release)
+        runCurrent()
+    }
+
     private class Engine(private val loadPaused: Boolean = false, private val onRelease: () -> Unit = {}) : PlayerEngine {
         private val channel = Channel<PlayerEvent>(Channel.UNLIMITED)
         override val events = channel.receiveAsFlow()

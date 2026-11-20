@@ -43,6 +43,7 @@ fun createPlayerRuntime(bridge: IosAvPlayerBridge, surfaces: IosMfPlayerSurfaces
     val runtime = MfPlayerRuntime(
         capabilities = PlayerCapabilities(contentMode = true),
         createEngine = { IosMfPlayerEngine(IosPlayerAdapter(), bridge).also { engine = it } },
+        nativeExternalSubtitles = false, // MaFei's authenticated sidecar overlay owns these.
         surface = { player, handle, attach ->
             val adapter = (player as IosMfPlayerEngine).adapter
             if (attach) surfaces.attach(handle, adapter) else surfaces.detach(handle, adapter)
@@ -70,8 +71,7 @@ private class IosMfPlayerEngine(
 
     override fun load(source: PlayerSource, options: PlayerOptions): CommandResult {
         clear()
-        // MaFei's authenticated sidecar overlay still owns external subtitles on iOS.
-        val result = adapter.load(source.copy(externalSubtitles = emptyList()), options)
+        val result = adapter.load(source, options)
         if (result is CommandResult.Accepted) {
             token = bridge.beginSdkPlayback(options.audioOnly)
             audioOnly = options.audioOnly

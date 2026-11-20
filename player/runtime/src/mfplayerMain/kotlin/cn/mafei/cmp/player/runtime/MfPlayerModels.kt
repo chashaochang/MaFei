@@ -13,11 +13,12 @@ import org.mfplayer.cmp.PlayerTrackKind
 import org.mfplayer.cmp.PlayerFailure as SdkFailure
 import org.mfplayer.cmp.PlayerTrack as SdkTrack
 
-internal fun PlayableResource.toSdkSource() = PlayerSource(
+internal fun PlayableResource.toSdkSource(nativeExternalSubtitles: Boolean = true) = PlayerSource(
     uri = url,
     headers = headers,
     allowInsecureTls = allowInsecureTls,
-    externalSubtitles = listOfNotNull(subtitleUrl?.let { PlayerExternalSubtitle(it, isDefault = true) }),
+    externalSubtitles = listOfNotNull(subtitleUrl?.takeIf { nativeExternalSubtitles }
+        ?.let { PlayerExternalSubtitle(it, isDefault = true) }),
 )
 
 internal fun SdkFailure.toMaFeiFailure(): PlayerFailure = when (this) {

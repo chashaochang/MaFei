@@ -35,6 +35,7 @@ internal class MfPlayerRuntime(
         PlayerOptions(startPositionMs = it.startPositionMs, playWhenReady = false, audioOnly = it.resource.audioOnly)
     },
     private val pausedLoadIsReady: Boolean = false,
+    private val nativeExternalSubtitles: Boolean = true,
     hostDispatcher: CoroutineDispatcher = Dispatchers.Main,
 ) : PlayerRuntime {
     private sealed interface Message {
@@ -144,7 +145,10 @@ internal class MfPlayerRuntime(
             attachedSurface?.let { surface(created, it, true) }
         }
         active = null
-        val result = current.load(command.resource.toSdkSource(), options(command).copy(contentMode = contentMode))
+        val result = current.load(
+            command.resource.toSdkSource(nativeExternalSubtitles),
+            options(command).copy(contentMode = contentMode),
+        )
         when (result) {
             is CommandResult.Accepted -> {
                 active = LoadBinding(command.generation, current.snapshot.value.generation)

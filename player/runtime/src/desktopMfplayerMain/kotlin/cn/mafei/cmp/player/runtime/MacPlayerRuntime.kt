@@ -19,6 +19,7 @@ fun createPlayerRuntime(surfaces: MacSurfaceRegistry): PlayerRuntime {
         createEngine = { MacPlayerAdapter.create() },
         // The rc.1 bridge reports file-loaded directly as Paused when autoplay is disabled.
         pausedLoadIsReady = true,
+        nativeExternalSubtitles = false, // MaFei's authenticated sidecar overlay owns these.
         surface = { engine, handle, attach ->
             val adapter = engine as MacPlayerAdapter
             if (attach) {
