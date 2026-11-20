@@ -103,17 +103,26 @@ class JniAvPlayerBridge : AvPlayerBridge {
  */
 class MacSurfaceRegistry {
     private val nextId = AtomicInteger(1)
-    private val layers = HashMap<PlayerSurfaceHandle, Long>()
+    private val layers = HashMap<PlayerSurfaceHandle, Any>()
 
     /** Registers a native AVPlayerLayer pointer (0 rejects). */
     fun register(layerPointer: Long): PlayerSurfaceHandle {
         require(layerPointer != 0L) { "layerPointer must be a live AVPlayerLayer*" }
+        return registerTarget(layerPointer)
+    }
+
+    fun register(container: javax.swing.JPanel): PlayerSurfaceHandle = registerTarget(container)
+
+    private fun registerTarget(target: Any): PlayerSurfaceHandle {
         val handle = PlayerSurfaceHandle()
-        synchronized(layers) { layers[handle] = layerPointer }
+        synchronized(layers) { layers[handle] = target }
         return handle
     }
 
-    fun layerOf(handle: PlayerSurfaceHandle): Long = synchronized(layers) { layers[handle] ?: 0L }
+    fun layerOf(handle: PlayerSurfaceHandle): Long = synchronized(layers) { layers[handle] as? Long ?: 0L }
+
+    fun containerOf(handle: PlayerSurfaceHandle): javax.swing.JPanel? =
+        synchronized(layers) { layers[handle] as? javax.swing.JPanel }
 
     fun unregister(handle: PlayerSurfaceHandle): Boolean = synchronized(layers) { layers.remove(handle) != null }
 }

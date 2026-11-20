@@ -335,6 +335,10 @@ if (desktopDevelopmentStorage) {
 compose.desktop {
     application {
         mainClass = "cn.mafei.cmp.MainKt"
+        if (providers.gradleProperty("mafeiCmpPlayer").orNull == "true") {
+            val sdkNative = rootProject.file("build/mfplayer-sdk/mfplayer-cmp-0.1.0-rc.1/macos/native")
+            jvmArgs += "-Dmfplayer.native.dir=${sdkNative.absolutePath}"
+        }
         if (desktopDevelopmentStorage) jvmArgs += "-Dmafei.desktop.developmentStorage=true"
         // 只保留窗口尺寸：验收统一走"真应用 + 真实数据"，假数据入口已移除（见 Main.kt）。
         desktopWindowWidth?.toIntOrNull()?.let { value ->

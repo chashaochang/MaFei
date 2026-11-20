@@ -8,6 +8,8 @@ import cn.mafei.cmp.player.runtime_android.AndroidSurfaceRegistry
 import cn.mafei.cmp.player.runtime_android.MainThreadPollScheduler
 import cn.mafei.cmp.player.runtime_android.SystemMediaPlayerEngine
 
+val usesSdkAndroidVideoSurface: Boolean get() = false
+
 fun createPlayerRuntime(context: Context, surfaces: AndroidSurfaceRegistry): PlayerRuntime =
     AndroidMediaPlayerRuntime(
         capabilities = PlayerCapabilities(

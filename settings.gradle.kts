@@ -11,6 +11,15 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = "mfplayerSdk"
+                    url = uri("build/mfplayer-sdk/mfplayer-cmp-0.1.0-rc.1/maven")
+                }
+            }
+            filter { includeGroup("org.mfplayer.cmp") }
+        }
         // CI must not depend on unpublished artifacts from an agent workstation.
         if (providers.environmentVariable("CI").orNull != "true") mavenLocal()
         maven("https://maven.eazytec-cloud.com/nexus/repository/maven-releases/")

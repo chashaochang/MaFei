@@ -5,6 +5,45 @@ plugins {
     id("mafei.kmp.shared")
 }
 
+val useCmpPlayer = providers.gradleProperty("mafeiCmpPlayer").orNull == "true"
+kotlin.sourceSets.named("androidMain") {
+    kotlin.srcDir(if (useCmpPlayer) "src/androidMfplayerMain/kotlin" else "src/androidSystemMain/kotlin")
+}
+kotlin.sourceSets.named("desktopMain") {
+    kotlin.srcDir(if (useCmpPlayer) "src/desktopMfplayerMain/kotlin" else "src/desktopSystemMain/kotlin")
+}
+
+// Keep the public checkout buildable without access to the private SDK.
+if (useCmpPlayer) {
+    kotlin {
+        sourceSets {
+            // The upstream engine API is published in two toolchain variants. Compile
+            // the same integration source against the API of each consumer target.
+            for ((target, version) in mapOf(
+                "androidMain" to "0.1.0-rc.1",
+                "desktopMain" to "0.1.0-rc.1",
+                "iosMain" to "0.1.0-rc.1",
+                "ohosMain" to "0.1.0-rc.1-cpf.1.3.0",
+            )) {
+                named(target) {
+                    kotlin.srcDir("src/mfplayerMain/kotlin")
+                    dependencies { implementation("org.mfplayer.cmp:player-api:$version") }
+                }
+            }
+            named("androidMain") {
+                dependencies { implementation("org.mfplayer.cmp:player-android:0.1.0-rc.1") }
+            }
+            named("desktopMain") {
+                dependencies { implementation("org.mfplayer.cmp:player-desktop:0.1.0-rc.1") }
+            }
+            named("desktopTest") {
+                kotlin.srcDir("src/mfplayerTest/kotlin")
+                dependencies { implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2") }
+            }
+        }
+    }
+}
+
 dependencies {
     add("commonMainApi", project(":player:api"))
     add("commonMainImplementation", project(":player:core"))

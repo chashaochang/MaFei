@@ -6,6 +6,7 @@ import androidx.compose.ui.awt.SwingPanel
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerSurfaceHandle
 import cn.mafei.cmp.player.runtime.createPlayerRuntime
+import cn.mafei.cmp.player.runtime.usesSdkMacVideoSurface
 import cn.mafei.cmp.player.runtime_macos.MacSurfaceRegistry
 import cn.mafei.cmp.player.runtime_macos.MacVideoSurface
 import kotlinx.coroutines.*
@@ -21,6 +22,10 @@ internal class MacPlayerHost {
 
     @Composable
     fun Surface(controller: PlayerController, modifier: Modifier) {
+        if (usesSdkMacVideoSurface) {
+            SdkSurface(controller, modifier)
+            return
+        }
         val canvas = remember(controller) {
             object : Canvas() {
                 var layer = 0L
@@ -45,5 +50,31 @@ internal class MacPlayerHost {
         }
         SwingPanel(factory = { JPanel(BorderLayout()).apply { isFocusable = false; background = java.awt.Color.BLACK; add(canvas, BorderLayout.CENTER) } },
             modifier = modifier, background = androidx.compose.ui.graphics.Color.Black)
+    }
+
+    @Composable
+    private fun SdkSurface(controller: PlayerController, modifier: Modifier) {
+        val panel = remember(controller) {
+            JPanel(BorderLayout()).apply { isFocusable = false; background = java.awt.Color.BLACK }
+        }
+        DisposableEffect(controller, panel) {
+            val handle = registry.register(panel)
+            val attach = scope.launch { controller.attachSurface(handle) }
+            onDispose {
+                scope.launch {
+                    attach.cancelAndJoin()
+                    try {
+                        controller.detachSurface(handle)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: IllegalStateException) {
+                        // The owning playback session can retire before its Swing panel.
+                    } finally {
+                        registry.unregister(handle)
+                    }
+                }
+            }
+        }
+        SwingPanel(factory = { panel }, modifier = modifier, background = androidx.compose.ui.graphics.Color.Black)
     }
 }

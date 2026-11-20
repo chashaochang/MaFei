@@ -6,7 +6,7 @@ import cn.mafei.cmp.player.runtime_macos.JniAvPlayerBridge
 import cn.mafei.cmp.player.runtime_macos.MacOsAvPlayerRuntime
 import cn.mafei.cmp.player.runtime_macos.MacSurfaceRegistry
 
-fun createPlayerRuntime(surfaces: MacSurfaceRegistry): PlayerRuntime = MacOsAvPlayerRuntime(
+internal fun createMacSystemPlayerRuntime(surfaces: MacSurfaceRegistry): PlayerRuntime = MacOsAvPlayerRuntime(
     capabilities = PlayerCapabilities(
         seek = true,
         speed = true,

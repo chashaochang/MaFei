@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Color
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -17,6 +18,7 @@ import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerRuntime
 import cn.mafei.cmp.player.api.PlayerSurfaceHandle
 import cn.mafei.cmp.player.runtime.createPlayerRuntime
+import cn.mafei.cmp.player.runtime.usesSdkAndroidVideoSurface
 import cn.mafei.cmp.player.runtime_android.AndroidSurfaceRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -54,6 +56,10 @@ internal class AndroidPlayerHost private constructor(context: Context) {
         val generation by remember(controller) { controller.state.map { it.generation }.distinctUntilChanged() }
             .collectAsState(controller.state.value.generation)
         LaunchedEffect(controller, generation) { AndroidMusicPlayback.bind(controller, generation) { latestActions } }
+        if (usesSdkAndroidVideoSurface) {
+            SdkSurface(controller, modifier, keepScreenAwake)
+            return
+        }
         val binding = remember {
             AndroidSurfaceBinding(
                 registry = surfaces,
@@ -79,6 +85,51 @@ internal class AndroidPlayerHost private constructor(context: Context) {
                 binding.release()
             },
         )
+    }
+
+    @Composable
+    private fun SdkSurface(controller: PlayerController, modifier: Modifier, keepScreenAwake: Boolean) {
+        val view = remember(controller) { AndroidSdkSurfaceBinding(controller) }
+        AndroidView(
+            factory = { context -> FrameLayout(context).apply { setBackgroundColor(Color.BLACK); view.attach(this) } },
+            modifier = modifier,
+            update = { view -> view.keepScreenOn = keepScreenAwake },
+            onRelease = { container -> container.keepScreenOn = false; view.release() },
+        )
+    }
+
+    private inner class AndroidSdkSurfaceBinding(private val controller: PlayerController) {
+        private var handle: PlayerSurfaceHandle? = null
+        fun attach(view: FrameLayout) {
+            release()
+            val registered = surfaces.register(view)
+            handle = registered
+            surfaceScope.launch {
+                try {
+                    controller.attachSurface(registered)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    surfaces.unregister(registered)
+                    if (handle === registered) handle = null
+                }
+            }
+        }
+        fun release() {
+            val registered = handle ?: return
+            handle = null
+            surfaceScope.launch {
+                try {
+                    controller.detachSurface(registered)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // A retired controller no longer accepts surface commands.
+                } finally {
+                    surfaces.unregister(registered)
+                }
+            }
+        }
     }
 
     private class AndroidSurfaceBinding(

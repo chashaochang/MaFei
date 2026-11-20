@@ -43,6 +43,24 @@
 和 `ohosMain` 分别实现 `createPlayerRuntime`，用各自的桥接参数构造同一个 `PlayerRuntime` 接口。
 应用平台宿主仍负责原生 Surface、系统会话和窗口生命周期，共享播放层不依赖这些平台参数。
 
+## MFPlayer CMP 开发联调
+
+四端 SDK `0.1.0-rc.1` 由受限的私有 Release 提供，公开 Git 不包含其二进制。
+使用有读取权限的 GitHub CLI 登录后运行 `node scripts/prepare-mfplayer-cmp.cjs`。
+脚本校验固定 SHA-256，再把 Maven 仓库和 macOS 原生包解压到根构建目录。
+Gradle 不从 `mavenLocal()` 解析播放器组件。
+
+```bash
+./gradlew -PmafeiCmpPlayer=true :composeApp:assembleDebug
+./gradlew -PmafeiCmpPlayer=true :composeApp:run
+./gradlew -PmafeiCmpPlayer=true :player:runtime:desktopTest --tests '*MfPlayerRuntimeTest'
+```
+
+此开关用于开发联调：Android 视频及音频、macOS 视频使用 SDK，macOS 音频
+暂用系统播放器。iOS 与鸿蒙目前只编译了共享适配代码，宿主未切换。
+不开开关时使用既有路径，公开 CI 不需要私有包。macOS `run` 从当前工作区
+加载联调包，尚不用于分发安装包。
+
 ## 依赖与状态生命周期
 
 ```text
