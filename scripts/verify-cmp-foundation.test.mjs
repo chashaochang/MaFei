@@ -48,11 +48,15 @@ test('missing module fails', () => fixture(root => {
   assert.throws(() => verifyFoundation(root), /missing module/);
 }));
 test('Compose drift fails', () => fixture(root => {
-  replace(root, 'gradle/libs.versions.toml', 'compose = "1.9.2-1.1.0"', 'compose = "1.9.2"');
+  replace(root, 'gradle/libs.versions.toml', 'compose = "1.9.2-1.3.0"', 'compose = "1.9.2"');
   assert.throws(() => verifyFoundation(root), /compose: expected/);
 }));
+test('OHOS backend cannot drift back to Skia', () => fixture(root => {
+  replace(root, 'gradle.properties', 'rendererBackend=fusion-renderer', 'rendererBackend=skia');
+  assert.throws(() => verifyFoundation(root), /OHOS renderer must be fusion-renderer/);
+}));
 test('root Harmony Compose package must match the frozen release', () => fixture(root => {
-  replace(root, 'harmonyApp/oh-package.json5', '"@cpf-kmp-cmp/compose": "1.9.2-1.1.0"', '"@cpf-kmp-cmp/compose": "1.9.2-1.0.0"');
+  replace(root, 'harmonyApp/oh-package.json5', '"@cpf-kmp-cmp/compose": "1.9.2-1.3.0"', '"@cpf-kmp-cmp/compose": "1.9.2-1.2.0"');
   assert.throws(() => verifyFoundation(root), /root compose HAR/);
 }));
 test('hardcoded Kotlin dependency cannot retain a different CPF release', () => fixture(root => {

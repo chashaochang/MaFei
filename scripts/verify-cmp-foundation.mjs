@@ -11,7 +11,7 @@ export function verifyFoundation(root) {
   const catalog = read('gradle/libs.versions.toml');
   const version = key => catalog.match(new RegExp(`^${key} = "([^"]+)"`, 'm'))?.[1];
   const expected = {
-    kotlin: '2.2.21-1.1.0', compose: '1.9.2-1.1.0',
+    kotlin: '2.2.21-1.3.0', compose: '1.9.2-1.3.0', lifecycle: '2.9.4-1.3.0',
     'compose-desktop': '1.9.2', 'compose-material3-upstream': '1.9.0',
     'navigation3-upstream': '1.0.0+dev2861', coroutines: '1.10.2-1.0.0',
     serialization: '1.9.1-1.0.0', koin: '4.1.1-1.0.0',
@@ -23,8 +23,8 @@ export function verifyFoundation(root) {
   const properties = read('gradle.properties');
   check(/^kotlin\.incremental\.native=true\s*$/m.test(properties), 'Native incremental compilation must be enabled');
   check(/^kotlin\.native\.cacheKind\.ohos_arm64=static\s*$/m.test(properties), 'OHOS static cache must be enabled');
-  check(/^rendererBackend=skia\s*$/m.test(properties), 'Renderer must be skia');
-  check(/^ohosSkikoVersion=0\.9\.22\.2-1\.1\.0\s*$/m.test(properties), 'OHOS Skiko version drift');
+  check(/^rendererBackend=fusion-renderer\s*$/m.test(properties), 'OHOS renderer must be fusion-renderer');
+  check(/^ohosSkikoVersion=0\.9\.22\.2-1\.3\.0\s*$/m.test(properties), 'OHOS Skiko version drift');
   const settings = read('settings.gradle.kts');
   const modules = [...settings.matchAll(/"(:[a-zA-Z0-9-]+(?::[a-zA-Z0-9-]+)*)"/g)].map(it => it[1]);
   check(modules.length > 0, 'No Gradle modules found');

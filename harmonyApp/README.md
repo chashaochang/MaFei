@@ -1,26 +1,28 @@
 # HarmonyOS thin host
 
-This directory follows the CPF-KMP-CMP 1.1.0 host shape. Generated libkn.so
+This directory follows the CPF-KMP-CMP 1.3.0 host shape. Generated libkn.so
 and libkn_api.h are published by:
 
 ```bash
 ./gradlew :composeApp:publishDebugBinariesToHarmonyApp
 ```
 
-The pinned toolchain is Kotlin `2.2.21-1.1.0`, Compose and the OHPM host
-`1.9.2-1.1.0`, with Skiko `0.9.22.2-1.1.0` and the Skia renderer. Versions
-follow the [official CPF 1.1.0 release notes](https://atomgit.com/CPF-KMP-CMP/docs/blob/KMP-v2.2.21-1.1.0/zh-cn/release-notes/KMP-v2.2.21-1.1.0%26CMP-v1.9.2-1.1.0.md).
+The pinned toolchain is Kotlin `2.2.21-1.3.0`, Compose and the OHPM host
+`1.9.2-1.3.0`, with Skiko `0.9.22.2-1.3.0`. OHOS uses `fusion-renderer`;
+both hosts use CPF's `Compose` component, which selects the renderer reported
+by the Kotlin controller. Android, iOS and Desktop keep their existing backends.
+Versions follow the [official CPF 1.3.0 release notes](https://atomgit.com/CPF-KMP-CMP/docs/blob/docs/1.3.0-release-notes/zh-cn/release-notes/KMP-v2.2.21-1.3.0%26CMP-v1.9.2-1.3.0.md).
 
 ## Debug incremental builds
 
-Native incremental compilation is enabled with `kotlin.incremental.native=true`.
-The OHOS target uses `kotlin.native.cacheKind.ohos_arm64=static`; the renderer
-remains Skia. This follows the [CPF Debug incremental build guide](https://atomgit.com/CPF-KMP-CMP/docs/blob/KMP-v2.2.21-1.1.0/zh-cn/深入开发/Debug增量构建效率提升.md).
-Per-file caches are generated in `composeApp/build/kotlin-native-ic-cache`.
-The first build populates those caches; keep them for ordinary development
-instead of running `clean` before every build.
+Native incremental compilation is requested with `kotlin.incremental.native=true`
+and `kotlin.native.cacheKind.ohos_arm64=static`. The CPF plugin can disable the
+native cache for a Compose UI artifact that supports both rendering backends.
+Do not bypass that guard. When switching renderers, run a clean link before
+publishing the new Kotlin binaries.
 
-Measured on 2026-10-11 with the same OHOS Debug link task:
+Historical comparison: measured on 2026-10-11 with CPF 1.1.0 and Skia,
+using the same OHOS Debug link task:
 
 | Scenario | Native link task | Entire Gradle build |
 | --- | ---: | ---: |
