@@ -115,6 +115,46 @@ class MfPlayerRuntimeTest {
         runCurrent()
     }
 
+    @kotlin.test.Test
+    fun androidRc1WaitsForMediaAcrossDecoderRebuildAndDropsRetiredEvents() = runTest {
+        val engine = Engine()
+        val received = mutableListOf<RuntimeEvent>()
+        val first = PlaybackGeneration()
+        val second = PlaybackGeneration()
+        val resource = PlayableResource("id", "https://media.invalid/movie")
+        val runtime = MfPlayerRuntime(PlayerCapabilities(), { engine }, androidRc1LoadCompatibility = true,
+            hostDispatcher = StandardTestDispatcher(testScheduler))
+        runtime.bind(received::add)
+        runtime.execute(RuntimeCommand.Load(first, resource))
+        runCurrent()
+        kotlin.test.assertTrue(received.none { it is RuntimeEvent.Ready })
+        val beforeRebuild = engine.snapshot.value.generation
+        val rebuilt = beforeRebuild.next()
+        engine.snapshot.value = engine.snapshot.value.copy(generation = rebuilt, durationMs = null)
+        engine.post(PlayerEvent.Paused(beforeRebuild))
+        engine.post(PlayerEvent.Ready(rebuilt, null))
+        engine.post(PlayerEvent.Paused(rebuilt))
+        runCurrent()
+        runtime.execute(RuntimeCommand.Play(first))
+        runtime.execute(RuntimeCommand.Load(second, PlayableResource("next", "https://media.invalid/next")))
+        runCurrent()
+        val next = engine.snapshot.value.generation
+        engine.post(PlayerEvent.Ended(rebuilt))
+        engine.post(PlayerEvent.Paused(next))
+        engine.post(PlayerEvent.Ready(next, 10_000))
+        runCurrent()
+        kotlin.test.assertEquals(
+            listOf(RuntimeEvent.Ready(first, null), RuntimeEvent.Ready(second, 10_000)),
+            received.filterIsInstance<RuntimeEvent.Ready>(),
+        )
+        kotlin.test.assertEquals(listOf(RuntimeEvent.Paused(first), RuntimeEvent.Paused(second)),
+            received.filterIsInstance<RuntimeEvent.Paused>())
+        kotlin.test.assertTrue(received.none { it is RuntimeEvent.Ended })
+        kotlin.test.assertEquals(1, engine.playCalls)
+        runtime.execute(RuntimeCommand.Release)
+        runCurrent()
+    }
+
     private class Engine(private val loadPaused: Boolean = false, private val onRelease: () -> Unit = {}) : PlayerEngine {
         private val channel = Channel<PlayerEvent>(Channel.UNLIMITED)
         override val events = channel.receiveAsFlow()

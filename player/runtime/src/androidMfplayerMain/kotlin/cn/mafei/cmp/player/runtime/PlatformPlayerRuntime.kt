@@ -16,6 +16,7 @@ fun createPlayerRuntime(context: Context, surfaces: AndroidSurfaceRegistry): Pla
     var mounted: FrameLayout? = null
     return MfPlayerRuntime(
         capabilities = PlayerCapabilities(contentMode = true),
+        androidRc1LoadCompatibility = true,
         createEngine = {
             driver = RealAndroidPlayerDriver(context.applicationContext)
             AndroidPlayerAdapter(driver)

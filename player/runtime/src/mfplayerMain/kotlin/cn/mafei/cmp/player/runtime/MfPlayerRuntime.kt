@@ -35,6 +35,7 @@ internal class MfPlayerRuntime(
         PlayerOptions(startPositionMs = it.startPositionMs, playWhenReady = false, audioOnly = it.resource.audioOnly)
     },
     private val pausedLoadIsReady: Boolean = false,
+    private val androidRc1LoadCompatibility: Boolean = false,
     private val nativeExternalSubtitles: Boolean = true,
     hostDispatcher: CoroutineDispatcher = Dispatchers.Main,
 ) : PlayerRuntime {
@@ -46,7 +47,7 @@ internal class MfPlayerRuntime(
 
     private data class LoadBinding(
         val generation: PlaybackGeneration,
-        val sdkGeneration: SdkGeneration,
+        var sdkGeneration: SdkGeneration,
         var prepared: Boolean = false,
     )
 
@@ -170,15 +171,20 @@ internal class MfPlayerRuntime(
 
     private fun accept(event: PlayerEvent) {
         val binding = active ?: return
-        if (binding.sdkGeneration != event.generation) return
-        val generation = binding.generation
         val snapshot = engine?.snapshot?.value?.takeIf { it.generation == event.generation }
-        if (!binding.prepared && pausedLoadIsReady && event is PlayerEvent.Paused) {
+        if (androidRc1LoadCompatibility) {
+            // rc.1 Android may open a new SDK generation on same-source decoder rebuild.
+            if (snapshot == null || event.generation.value < binding.sdkGeneration.value) return
+            binding.sdkGeneration = event.generation
+        } else if (binding.sdkGeneration != event.generation) return
+        val generation = binding.generation
+        if (!binding.prepared && (pausedLoadIsReady || androidRc1LoadCompatibility) && event is PlayerEvent.Paused) {
             binding.prepared = true
             emit(RuntimeEvent.Ready(generation, snapshot?.durationMs))
         }
         val mapped = when (event) {
-            is PlayerEvent.Ready -> if (binding.prepared) null else {
+            // Android rc.1 reports Ready for core initialization, not file-loaded.
+            is PlayerEvent.Ready -> if (binding.prepared || androidRc1LoadCompatibility) null else {
                 binding.prepared = true
                 RuntimeEvent.Ready(generation, event.durationMs)
             }
