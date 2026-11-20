@@ -155,6 +155,10 @@ if errorlevel 1 (
 set /p BUNDLE_NAME=<"%IDENTITY_OUTPUT%"
 del "%IDENTITY_OUTPUT%" 2>nul
 echo   - Resolved bundle: %BUNDLE_NAME%
+if "%BUILD_MODE%"=="debug" if "%PLATFORM%"=="ohosArm64" if "%LOCAL_OHOS_PATH%"=="" (
+  node "%~dp0..\scripts\prepare-mfplayer.cjs"
+  if errorlevel 1 exit /b 1
+)
 "%HDC_BIN%" -t %TARGET_ID% shell aa force-stop %BUNDLE_NAME% 2>nul
 echo [Harmony-Debug-Pipeline] Prep: hdc force-stop %BUNDLE_NAME% (ignore errors if not running)
 if not defined OHOS_KMP_RUN_GRADLE_MODULE set "OHOS_KMP_RUN_GRADLE_MODULE=composeApp"

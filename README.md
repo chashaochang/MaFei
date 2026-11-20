@@ -134,4 +134,4 @@ MaFei 2.0 使用 **Kotlin Multiplatform / Compose Multiplatform** 共享应用�
 
 除单独声明外，代码按 [GPL-3.0-or-later](LICENSE) 发布，第三方组件遵循各自许可证。
 
-HarmonyOS 播放器使用的 **MFPlayer** 是独立授权的本地 SDK，不随公开仓库分发，也不属于本仓库的开源许可。构建前提见[本地资料与依赖](composeApp/README.md#本地资料与依赖)。
+HarmonyOS 播放器 **MFPlayer** 不随公开源码分发，也不属于本仓库的开源许可。有权限的开发者可从私有 Git 仓库自动准备 Debug 产物，见[鸿蒙构建说明](harmonyApp/README.md#local-prerequisites)。

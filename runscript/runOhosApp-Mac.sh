@@ -162,6 +162,9 @@ fi
 # Resolve before any device command; an IDE may still pass the official bundle.
 BUNDLE_NAME=$(node "$BUNDLE_RESOLVER" "$HARMONY_APP_DIR/AppScope/app.json5" "$BUILD_MODE" "$BUNDLE_NAME")
 echo "  - Resolved bundle: $BUNDLE_NAME"
+if [ "$BUILD_MODE" = "debug" ] && [ "$PLATFORM" = "ohosArm64" ] && [ -z "$LOCAL_OHOS_PATH" ]; then
+    node "$(dirname "$BUNDLE_RESOLVER")/../scripts/prepare-mfplayer.cjs"
+fi
 "$HDC_BIN" -t "$TARGET_ID" shell aa force-stop "$BUNDLE_NAME" >/dev/null 2>&1 || true
 echo "[Harmony-Debug-Pipeline] Prep: hdc force-stop $BUNDLE_NAME (ignore errors if not running)"
 OHOS_KMP_RUN_GRADLE_MODULE="${OHOS_KMP_RUN_GRADLE_MODULE:-composeApp}"

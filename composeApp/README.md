@@ -64,7 +64,7 @@ legacy/       旧 HarmonyOS ArkTS 行为与数据兼容参考
 
 ## 本地资料与依赖
 
-签名资料、凭据、个人设备日志及未获授权分发的依赖不得加入提交。MFPlayer 是独立的闭源本地 SDK，不随当前源码树分发，也不属于本仓库开源许可；合法持有 SDK 的开发者按[本地前提](../harmonyApp/README.md#local-prerequisites)配置。
+签名资料、凭据、个人设备日志及未获授权分发的依赖不得加入提交。MFPlayer 不随公开源码树分发，也不属于本仓库开源许可。新设备可按[鸿蒙构建说明](../harmonyApp/README.md#local-prerequisites)登录有权限的 GitHub 账号，从私有产物仓库准备 Debug HAR；已有本地 HAR 不会被覆盖。
 
 历史清理范围、提交号映射与本地备份边界见[历史清理记录](HISTORY_CLEANUP.md)。
 

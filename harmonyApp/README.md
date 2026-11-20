@@ -36,12 +36,23 @@ task-specific `--rerun`, so the comparison does not measure skipped tasks.
 
 ## Local prerequisites
 
-The HarmonyOS player requires the separately licensed, closed-source MFPlayer
-SDK. Place your authorized `mfplayer.har` at `harmonyApp/entry/libs/mfplayer.har`
-before running `ohpm install --all`. The SDK and its backup archives are local
-inputs, excluded from the current source tree and from the repository's GPL license.
-The integration package name is `mfplayer`; do not silently substitute another
-engine when the local SDK is missing.
+The HarmonyOS player requires the separately licensed MFPlayer SDK. On a new
+machine, install GitHub CLI and sign in with an account that can read the private
+`chashaochang/mafei-player-artifacts` repository. For a manual build or DevEco
+project sync, run the following from the MaFei repository root first:
+
+```bash
+gh auth login --hostname github.com
+node scripts/prepare-mfplayer.cjs
+```
+
+The HarmonyOS Debug run scripts call the preparation step automatically. It
+downloads the pinned ARM64 development HAR, checks its SHA-256, and places it
+at `harmonyApp/entry/libs/mfplayer.har` for OHPM. An existing local HAR is never
+replaced, and no GitHub access is required to reuse it. Release builds still
+require a separately supplied release-qualified HAR; the Debug candidate is
+not allowed in a release build. The SDK is not in the public source tree or
+covered by MaFei's GPL license.
 
 Use the Node and OHPM bundled with the same DevEco Studio installation as Hvigor.
 The latest local validation used DevEco's Node 24.14.1; a shell Node 20 installation
