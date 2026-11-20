@@ -94,7 +94,7 @@ fun MusicLibraryScreen(
                                     start = layout.pagePaddingDp.dp, end = layout.pagePaddingDp.dp,
                                     top = hoverInset, bottom = safe.bottom + bottomInset + 20.dp,
                                 ), horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(maxOf(18.dp, hoverInset))) {
+                                verticalArrangement = Arrangement.spacedBy(maxOf(12.dp, mediaArtworkRowGap(hoverInset)))) {
                                 items(state.items, key = { it.id.value }) { item -> MusicArtworkCard(item, { onOpen(item) }, artwork) }
                                 item(span = { GridItemSpan(maxLineSpan) }) { MusicPageFooter(state) }
                             }

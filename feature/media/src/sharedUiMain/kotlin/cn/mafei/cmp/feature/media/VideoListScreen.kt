@@ -52,6 +52,7 @@ import cn.mafei.cmp.common.ui.LegacySortRow
 import cn.mafei.cmp.common.ui.LegacySortSheet
 import cn.mafei.cmp.common.ui.LegacyVideoCard
 import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
+import cn.mafei.cmp.common.ui.mediaArtworkRowGap
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
@@ -113,13 +114,14 @@ fun VideoListScreen(
     val columns = legacyMediaColumns(contentWidth)
     val gap = legacyMediaGridGap(contentWidth)
     val hoverInset = mediaArtworkGridHoverInset(contentWidth.dp, columns, gap)
+    val rowGap = maxOf(gap, mediaArtworkRowGap(hoverInset))
     val horizontalPadding = gap * 2
     val bottomPadding = safeArea.bottom + bottomOverlayInset +
         if (bottomNavigationVisible) 112.dp else 30.dp
     // CPF may leave the final LazyGrid row under the sibling Bottom Tab when
     // the inset exists only as contentPadding. Keep a real tail item, matching
     // LibraryIndexScreen, so the last card always scrolls above the dock.
-    val scrollTail = bottomPadding
+    val scrollTail = bottomPadding + maxOf(gap, hoverInset) - rowGap
     // A secondary library page always owns a title bar on every form factor.
     // The large shell handles root navigation, so [onBack] may be null there;
     // that must not remove the page title itself.
@@ -206,7 +208,7 @@ fun VideoListScreen(
                             bottom = 0.dp,
                         ),
                         horizontalArrangement = Arrangement.spacedBy(gap),
-                        verticalArrangement = Arrangement.spacedBy(maxOf(gap, hoverInset)),
+                        verticalArrangement = Arrangement.spacedBy(rowGap),
                     ) {
                         items(items, key = { it.id.value }) { item ->
                             val selected = item.id.value in selectedIds

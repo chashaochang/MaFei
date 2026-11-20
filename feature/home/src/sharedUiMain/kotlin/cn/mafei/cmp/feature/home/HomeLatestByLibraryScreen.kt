@@ -30,6 +30,7 @@ import cn.mafei.cmp.common.ui.LegacyEmptyView
 import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyVideoCard
 import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
+import cn.mafei.cmp.common.ui.mediaArtworkRowGap
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiErrorDialog
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
@@ -109,7 +110,7 @@ fun HomeLatestByLibraryScreen(
                             bottom = bottomPadding,
                         ),
                         horizontalArrangement = Arrangement.spacedBy(gap),
-                        verticalArrangement = Arrangement.spacedBy(maxOf(gap, hoverInset)),
+                        verticalArrangement = Arrangement.spacedBy(maxOf(gap, mediaArtworkRowGap(hoverInset))),
                     ) {
                         collections.forEach { collection ->
                             val itemsForLibrary = latestByCollection[collection.id].orEmpty()

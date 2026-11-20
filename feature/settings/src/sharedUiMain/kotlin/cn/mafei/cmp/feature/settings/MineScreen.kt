@@ -72,6 +72,7 @@ import cn.mafei.cmp.common.ui.mafeiArtworkFeedback
 import cn.mafei.cmp.common.ui.mafeiMediaCardInteraction
 import cn.mafei.cmp.common.ui.rememberMediaCardInteraction
 import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
+import cn.mafei.cmp.common.ui.mediaArtworkRowGap
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.PlaybackHistoryItem
 import cn.mafei.cmp.core.domain.movieRatingText
@@ -366,7 +367,7 @@ private fun MineHistoryRows(
     BoxWithConstraints(Modifier.fillMaxWidth()) {
       val hoverInset = mediaArtworkGridHoverInset(maxWidth, columns, 10.dp)
       Column(Modifier.padding(top = (hoverInset - 12.dp).coerceAtLeast(0.dp)),
-          verticalArrangement = Arrangement.spacedBy(maxOf(14.dp, hoverInset))) {
+          verticalArrangement = Arrangement.spacedBy(maxOf(10.dp, mediaArtworkRowGap(hoverInset)))) {
         items.chunked(columns).forEach { rowItems ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 rowItems.forEach { item ->
@@ -541,7 +542,7 @@ fun MineHistoryScreen(
                         bottom = safeArea.bottom + 20.dp,
                     ),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(maxOf(14.dp, hoverInset)),
+                    verticalArrangement = Arrangement.spacedBy(maxOf(10.dp, mediaArtworkRowGap(hoverInset))),
                 ) {
                     items(items, key = { item -> historyItemKey(item) }) { item ->
                         MineHistoryPoster(

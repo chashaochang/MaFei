@@ -35,7 +35,8 @@ fun LiveChannelScreen(title: String, page: MediaPageState, onBack: (() -> Unit)?
                 val hoverInset = mediaArtworkGridHoverInset(maxWidth - safe.start - safe.end - 32.dp, columns, 8.dp, 2f)
                 LazyVerticalGrid(GridCells.Fixed(columns), state = grid,
                     contentPadding = PaddingValues(start = safe.start + 16.dp, end = safe.end + 16.dp, top = hoverInset, bottom = safe.bottom + 30.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(hoverInset)) {
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(maxOf(8.dp, mediaArtworkRowGap(hoverInset)))) {
                     items(page.items.size, key = { page.items[it].id.value }) { index ->
                         val item = page.items[index]
                         LegacyVideoCard(item, { onChannel(page.items, index) }, subtitle = "", posterAspectRatio = 2f,

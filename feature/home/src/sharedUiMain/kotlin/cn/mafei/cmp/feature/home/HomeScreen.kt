@@ -545,9 +545,10 @@ fun HomeScreen(
       val gridEndPadding = layout.pagePaddingDp.dp + safeArea.end
       val gridBottomPadding = (if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 48.dp) +
           safeArea.bottom + bottomOverlayInset
-      val gridVerticalGap = maxOf(20.dp, mediaArtworkGridHoverInset(
+      val gridHoverInset = mediaArtworkGridHoverInset(
           layout.gridWidthDp.dp, if (overview) latestColumns else legacyMediaColumns(layout.gridWidthDp), latestGap,
-      ))
+      )
+      val gridVerticalGap = maxOf(12.dp, mediaArtworkRowGap(gridHoverInset))
       // Match the legacy HomeLatestFeedContent.constraintSize(minHeight): a
       // short/loading/empty feed must still be tall enough for its sticky
       // header to remain at the top. Without this tail the lazy grid clamps to
@@ -609,7 +610,7 @@ fun HomeScreen(
                     overview && layout.navigation != NavigationPlacement.Bottom ->
                         safeArea.top + 12.dp
                     overview -> 0.dp
-                    else -> safeArea.top + HomeActionBarHeight + gridVerticalGap
+                    else -> safeArea.top + HomeActionBarHeight + maxOf(20.dp, gridHoverInset)
                 },
                 bottom = gridBottomPadding,
             ),

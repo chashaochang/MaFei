@@ -46,6 +46,7 @@ import cn.mafei.cmp.common.ui.LegacySortRow
 import cn.mafei.cmp.common.ui.LegacySortSheet
 import cn.mafei.cmp.common.ui.LegacyVideoCard
 import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
+import cn.mafei.cmp.common.ui.mediaArtworkRowGap
 import cn.mafei.cmp.common.ui.legacyMediaColumns
 import cn.mafei.cmp.common.ui.legacyMediaGridGap
 import cn.mafei.cmp.core.domain.MediaItem
@@ -150,7 +151,7 @@ fun FavoriteScreen(
                             bottom = bottomPadding,
                         ),
                         horizontalArrangement = Arrangement.spacedBy(gap),
-                        verticalArrangement = Arrangement.spacedBy(maxOf(gap, hoverInset)),
+                        verticalArrangement = Arrangement.spacedBy(maxOf(gap, mediaArtworkRowGap(hoverInset))),
                     ) {
                         items(items, key = { it.id.value }) { item ->
                             LegacyVideoCard(

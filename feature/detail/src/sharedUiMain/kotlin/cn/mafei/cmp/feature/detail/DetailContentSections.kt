@@ -87,6 +87,7 @@ import cn.mafei.cmp.common.ui.mafeiArtworkFeedback
 import cn.mafei.cmp.common.ui.mafeiMediaCardInteraction
 import cn.mafei.cmp.common.ui.rememberMediaCardInteraction
 import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
+import cn.mafei.cmp.common.ui.mediaArtworkRowGap
 import cn.mafei.cmp.common.ui.mediaArtworkHoverTopInset
 import cn.mafei.cmp.common.ui.mafeiDismissOnOutsidePointer
 import cn.mafei.cmp.core.domain.MediaItem
@@ -234,7 +235,7 @@ internal fun SeriesSections(
                     val hoverInset = mediaArtworkGridHoverInset(availableWidth, columns, gap)
                     Column(
                         Modifier.fillMaxWidth().padding(start = horizontalPadding, end = horizontalPadding, top = hoverInset),
-                        verticalArrangement = Arrangement.spacedBy(maxOf(gap, hoverInset)),
+                        verticalArrangement = Arrangement.spacedBy(maxOf(gap, mediaArtworkRowGap(hoverInset))),
                     ) {
                         seasons.chunked(columns).forEach { rowSeasons ->
                             Row(

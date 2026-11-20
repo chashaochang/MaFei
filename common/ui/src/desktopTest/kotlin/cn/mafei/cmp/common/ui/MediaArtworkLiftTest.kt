@@ -68,19 +68,32 @@ class MediaArtworkLiftTest {
         assertRaisedWithinViewport(5)
     }
 
-    @Test fun gridCornersKeepTheirCaptionsAndDoNotClipAtTheViewport() {
+    @Test fun compactGridKeepsItsCaptionsClearWhenTheCoverInTheNextRowLifts() {
+        val hoverInset = mediaArtworkGridHoverInset(296.dp, 2, 16.dp)
+        val rowGap = maxOf(16.dp, mediaArtworkRowGap(hoverInset))
         rule.setContent {
             TestTheme {
                 LazyVerticalGrid(GridCells.Fixed(2), Modifier.size(336.dp, 650.dp)
                     .testTag("viewport").clipToBounds().background(MaterialTheme.colorScheme.background),
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 34.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(34.dp)) {
+                    verticalArrangement = Arrangement.spacedBy(rowGap)) {
                     items(4) { Card(it) }
                 }
             }
         }
         rule.runOnIdle { clearFocus() }
+        val upperCard = rule.onNodeWithTag("card-0")
+        val lowerCard = rule.onNodeWithTag("card-2")
+        val upperBounds = upperCard.getUnclippedBoundsInRoot()
+        val lowerBounds = lowerCard.getUnclippedBoundsInRoot()
+        assertEquals(rowGap.value, (lowerBounds.top - upperBounds.bottom).value, .6f)
+        assertEquals(10f, (hoverInset - rowGap).value, .6f)
+        lowerCard.performMouseInput { moveTo(center) }
+        rule.mainClock.advanceTimeBy(400)
+        val raised = rule.onNodeWithTag("art-2", true).getUnclippedBoundsInRoot()
+        assertTrue(raised.top >= upperBounds.bottom - .6.dp, "Raised artwork must not cover the row above")
+        assertEquals(upperBounds, upperCard.getUnclippedBoundsInRoot())
         repeat(4) { assertRaisedWithinViewport(it) }
     }
 

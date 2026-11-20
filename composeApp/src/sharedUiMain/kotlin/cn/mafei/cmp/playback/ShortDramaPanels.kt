@@ -158,7 +158,7 @@ private fun ShortDramaEpisodePicker(
                 columns = GridCells.Adaptive(48.dp), state = listState,
                 modifier = if (boundedGrid) Modifier.heightIn(max = 300.dp) else Modifier.weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 12.dp),
             ) {
                 items(visible.map { seasonItems[it] }, key = { items[it].id.value }) { index ->
                     val chosen = index == currentIndex

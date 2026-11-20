@@ -145,8 +145,8 @@ fun Modifier.mafeiArtworkFeedback(
         scaleX = scale.value
         scaleY = scale.value
         transformOrigin = TransformOrigin(.5f, 1f)
-        translationY = -2f * density * lift.value
-        shadowElevation = 10f * density * lift.value
+        translationY = -ArtworkLiftOffset * density * lift.value
+        shadowElevation = ArtworkLiftShadow * density * lift.value
         ambientShadowColor = Color.Black.copy(alpha = .18f)
         spotShadowColor = Color.Black.copy(alpha = .32f)
         clip = false
@@ -166,8 +166,16 @@ fun Modifier.mafeiArtworkFeedback(
 }
 
 internal const val ArtworkLiftScale = 1.09f
+private const val ArtworkLiftOffset = 2f
+private const val ArtworkLiftShadow = 10f
 
-fun mediaArtworkHoverTopInset(artworkHeight: Dp): Dp = artworkHeight * (ArtworkLiftScale - 1f) + 12.dp
+fun mediaArtworkHoverTopInset(artworkHeight: Dp): Dp =
+    artworkHeight * (ArtworkLiftScale - 1f) + (ArtworkLiftOffset + ArtworkLiftShadow).dp
+
+/** Between rows only the raised cover needs clearance; its shadow can extend outside the gap. */
+fun mediaArtworkRowGap(hoverTopInset: Dp): Dp =
+    (hoverTopInset - ArtworkLiftShadow.dp).coerceAtLeast(0.dp)
+
 fun mediaArtworkHoverSideInset(artworkWidth: Dp): Dp = artworkWidth * ((ArtworkLiftScale - 1f) / 2f) + 12.dp
 
 fun mediaArtworkGridHoverInset(contentWidth: Dp, columns: Int, gap: Dp, aspectRatio: Float = 2f / 3f): Dp {

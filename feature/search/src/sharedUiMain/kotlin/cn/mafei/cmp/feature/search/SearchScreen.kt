@@ -62,6 +62,7 @@ import cn.mafei.cmp.common.ui.LegacyEmptyView
 import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyVideoCard
 import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
+import cn.mafei.cmp.common.ui.mediaArtworkRowGap
 import cn.mafei.cmp.common.ui.mediaArtworkHoverSideInset
 import cn.mafei.cmp.common.ui.mafeiArtworkShelfBleed
 import cn.mafei.cmp.common.ui.MaFeiActionBar
@@ -272,7 +273,7 @@ fun SearchScreen(
                                 ),
                                 horizontalArrangement = Arrangement.spacedBy(gap),
                                 verticalArrangement = Arrangement.spacedBy(
-                                    maxOf(20.dp, hoverInset),
+                                    maxOf(12.dp, mediaArtworkRowGap(hoverInset)),
                                 ),
                             ) {
                                 items(results, key = { it.id.value }) { item ->

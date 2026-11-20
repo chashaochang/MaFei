@@ -73,7 +73,7 @@ fun PhotoCatalogScreen(title: String, albums: Boolean, page: MediaPageState, onB
                         LazyVerticalGrid(GridCells.Fixed(column), state = grid,
                             contentPadding = PaddingValues(start = safe.start + pad, end = safe.end + pad, top = 8.dp, bottom = safe.bottom + 24.dp),
                             horizontalArrangement = Arrangement.spacedBy(if (albums) 12.dp else 4.dp),
-                            verticalArrangement = Arrangement.spacedBy(if (albums) 18.dp else 4.dp)) {
+                            verticalArrangement = Arrangement.spacedBy(if (albums) 12.dp else 4.dp)) {
                             if (albums) items(page.items, key = { it.id.value }) { album ->
                                 Column(Modifier.fillMaxWidth().clickable { onAlbum(album) }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     artwork(album, Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(8.dp)))
