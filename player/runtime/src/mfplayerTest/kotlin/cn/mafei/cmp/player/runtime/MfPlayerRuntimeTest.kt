@@ -83,7 +83,24 @@ class MfPlayerRuntimeTest {
         kotlin.test.assertEquals(listOf("attach:1", "detach:1", "attach:2", "detach:2", "release"), calls)
     }
 
-    private class Engine(private val onRelease: () -> Unit = {}) : PlayerEngine {
+    @kotlin.test.Test
+    fun confirmedPausedLoadCanBeReadyWithoutDuplicateReady() = runTest {
+        val engine = Engine(loadPaused = true)
+        val received = mutableListOf<RuntimeEvent>()
+        val current = PlaybackGeneration()
+        val runtime = MfPlayerRuntime(PlayerCapabilities(), { engine }, pausedLoadIsReady = true,
+            hostDispatcher = StandardTestDispatcher(testScheduler))
+        runtime.bind(received::add)
+        runtime.execute(RuntimeCommand.Load(current, PlayableResource("id", "fixture.mp4")))
+        runCurrent()
+        engine.post(PlayerEvent.Ready(engine.snapshot.value.generation, 10_000))
+        runCurrent()
+        kotlin.test.assertEquals(listOf(RuntimeEvent.Ready(current, 10_000), RuntimeEvent.Paused(current)), received.drop(1))
+        runtime.execute(RuntimeCommand.Release)
+        runCurrent()
+    }
+
+    private class Engine(private val loadPaused: Boolean = false, private val onRelease: () -> Unit = {}) : PlayerEngine {
         private val channel = Channel<PlayerEvent>(Channel.UNLIMITED)
         override val events = channel.receiveAsFlow()
         override val snapshot = MutableStateFlow(PlayerSnapshot.Empty)
@@ -100,8 +117,8 @@ class MfPlayerRuntimeTest {
             this.source = source
             this.options = options
             val generation = snapshot.value.generation.next()
-            snapshot.value = snapshot.value.copy(generation = generation)
-            post(PlayerEvent.Ready(generation, 10_000))
+            snapshot.value = snapshot.value.copy(generation = generation, durationMs = 10_000)
+            post(if (loadPaused) PlayerEvent.Paused(generation) else PlayerEvent.Ready(generation, 10_000))
             return accepted
         }
         override fun play(): CommandResult { playCalls++; return accepted }

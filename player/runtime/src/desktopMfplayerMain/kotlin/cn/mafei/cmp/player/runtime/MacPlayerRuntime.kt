@@ -17,6 +17,8 @@ fun createPlayerRuntime(surfaces: MacSurfaceRegistry): PlayerRuntime {
     val video = MfPlayerRuntime(
         capabilities = PlayerCapabilities(contentMode = true),
         createEngine = { MacPlayerAdapter.create() },
+        // The rc.1 bridge reports file-loaded directly as Paused when autoplay is disabled.
+        pausedLoadIsReady = true,
         surface = { engine, handle, attach ->
             val adapter = engine as MacPlayerAdapter
             if (attach) {

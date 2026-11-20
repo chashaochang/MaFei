@@ -34,6 +34,7 @@ internal class MfPlayerRuntime(
     private val options: (RuntimeCommand.Load) -> PlayerOptions = {
         PlayerOptions(startPositionMs = it.startPositionMs, playWhenReady = false, audioOnly = it.resource.audioOnly)
     },
+    private val pausedLoadIsReady: Boolean = false,
     hostDispatcher: CoroutineDispatcher = Dispatchers.Main,
 ) : PlayerRuntime {
     private sealed interface Message {
@@ -45,6 +46,7 @@ internal class MfPlayerRuntime(
     private data class LoadBinding(
         val generation: PlaybackGeneration,
         val sdkGeneration: SdkGeneration,
+        var prepared: Boolean = false,
     )
 
     private val inbox = Channel<Message>(Channel.UNLIMITED)
@@ -167,8 +169,15 @@ internal class MfPlayerRuntime(
         if (binding.sdkGeneration != event.generation) return
         val generation = binding.generation
         val snapshot = engine?.snapshot?.value?.takeIf { it.generation == event.generation }
+        if (!binding.prepared && pausedLoadIsReady && event is PlayerEvent.Paused) {
+            binding.prepared = true
+            emit(RuntimeEvent.Ready(generation, snapshot?.durationMs))
+        }
         val mapped = when (event) {
-            is PlayerEvent.Ready -> RuntimeEvent.Ready(generation, event.durationMs)
+            is PlayerEvent.Ready -> if (binding.prepared) null else {
+                binding.prepared = true
+                RuntimeEvent.Ready(generation, event.durationMs)
+            }
             is PlayerEvent.Playing -> RuntimeEvent.Playing(generation)
             is PlayerEvent.Paused -> RuntimeEvent.Paused(generation)
             is PlayerEvent.Buffering -> when {
