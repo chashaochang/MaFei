@@ -4,7 +4,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
 import cn.mafei.cmp.player.api.*
-import cn.mafei.cmp.player.runtime_ios.*
+import cn.mafei.cmp.player.runtime.createPlayerRuntime
+import cn.mafei.cmp.player.runtime_ios.IosAvPlayerBridge
+import cn.mafei.cmp.player.runtime_ios.IosSurfaceRegistry
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -15,15 +17,7 @@ import platform.UIKit.UIView
 internal class IosPlayerHost(private val bridge: IosAvPlayerBridge) {
     private val surfaces = IosSurfaceRegistry()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    fun runtime() = IosPlayerRuntime(
-        PlayerCapabilities(seek = true, speed = true, trackSelection = true, contentMode = true), bridge, surfaces,
-        object : IosPollScheduler {
-            override fun schedule(periodMs: Long, tick: () -> Unit): AutoCloseable {
-                val job = scope.launch { while (isActive) { delay(periodMs); tick() } }
-                return AutoCloseable { job.cancel() }
-            }
-        },
-    )
+    fun createRuntime() = createPlayerRuntime(bridge, surfaces, scope)
 
     @OptIn(ExperimentalForeignApi::class)
     @Composable

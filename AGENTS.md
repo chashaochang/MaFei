@@ -11,7 +11,7 @@
 
 ## 模块与必读索引
 
-依赖方向：`core → providers → data → feature/common/player → composeApp`；平台能力在 `platform/*` 和 `player/runtime-*`。浏览请求、分页、缓存属于 `feature/browse-core` 的浏览控制器；Feature Screen 负责展示。
+依赖方向：`core → providers → data → feature/common/player → composeApp`；平台能力在 `platform/*` 和 `player/runtime` 的平台源集。浏览请求、分页、缓存属于 `feature/browse-core` 的浏览控制器；Feature Screen 负责展示。
 
 | 修改范围 | 动手前阅读 |
 | --- | --- |

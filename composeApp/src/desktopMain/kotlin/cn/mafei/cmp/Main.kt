@@ -41,7 +41,6 @@ import cn.mafei.cmp.storage.createDesktopSettings
 import cn.mafei.cmp.storage.createDesktopCredentialStore
 import cn.mafei.cmp.storage.usesDesktopDevelopmentStorage
 import cn.mafei.cmp.platform.http.createPlatformHttpTransport
-import cn.mafei.cmp.player.runtime_macos.createMacOsPlayerRuntime
 import mafei.composeapp.generated.resources.Res
 import mafei.composeapp.generated.resources.app_launcher_icon
 import org.jetbrains.compose.resources.painterResource
@@ -80,7 +79,7 @@ fun main() = application {
             createDesktopSettings(),
             createDesktopCredentialStore(),
             createPlatformHttpTransport(),
-            playerRuntimeFactory = { player.runtime() },
+            playerRuntimeFactory = { player.createRuntime() },
             photoSaver = DesktopPhotoSaver,
             externalSubtitleOverlay = true,
         )

@@ -28,7 +28,7 @@ fun MainViewController(
     return ComposeUIViewController {
     val runtime = ProcessApplication.getOrCreate {
         ApplicationRuntime(createIosSettings(), IosKeychainCredentialStore("cn.mafei.credentials.v1"), createPlatformHttpTransport(),
-            playerRuntimeFactory = { player.runtime() }, photoSaver = IosPhotoSaver, externalSubtitleOverlay = true)
+            playerRuntimeFactory = { player.createRuntime() }, photoSaver = IosPhotoSaver, externalSubtitleOverlay = true)
     }
     val navigationOwner = rememberNavigationEventDispatcherOwner(parent = null)
     CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides navigationOwner,

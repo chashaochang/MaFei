@@ -21,6 +21,12 @@ native cache for a Compose UI artifact that supports both rendering backends.
 Do not bypass that guard. When switching renderers, run a clean link before
 publishing the new Kotlin binaries.
 
+After pulling the `:player:runtime` migration into an existing checkout,
+`Unknown dependent library cn.mafei.cmp.player:runtime-ohos` indicates a stale
+local Native cache. Move `composeApp/build/kotlin-native-ic-cache/debugShared`
+out of the build directory and rerun the publish task above. Fresh checkouts
+do not have this cache.
+
 Historical comparison: measured on 2026-10-11 with CPF 1.1.0 and Skia,
 using the same OHOS Debug link task:
 

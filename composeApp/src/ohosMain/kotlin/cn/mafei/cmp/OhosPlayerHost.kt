@@ -23,7 +23,6 @@ import androidx.compose.ui.napi.JsEnv
 import androidx.compose.ui.napi.JsObject
 import androidx.compose.ui.napi.js
 import androidx.compose.ui.napi.nApiValue
-import cn.mafei.cmp.player.api.PlayerCapabilities
 import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerDeviceControls
@@ -37,9 +36,9 @@ import cn.mafei.cmp.player.api.PlayerSurfaceHandle
 import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.player.api.playerTrackDisplayLabel
 import cn.mafei.cmp.player.api.TrackKind
+import cn.mafei.cmp.player.runtime.createPlayerRuntime
 import cn.mafei.cmp.player.runtime_ohos.OhosNativePlayerBridge
 import cn.mafei.cmp.player.runtime_ohos.OhosNativePlayerEvent
-import cn.mafei.cmp.player.runtime_ohos.OhosPlayerRuntime
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.toKString
@@ -709,20 +708,7 @@ private class ComposeOhosPlayerBridge : OhosNativePlayerBridge {
         OhosPlayerHostState.unbind(eventSink)
 }
 
-fun createOhosPlayerRuntime(): PlayerRuntime = OhosPlayerRuntime(
-    capabilities = PlayerCapabilities(
-        seek = true,
-        speed = true,
-        trackSelection = true,
-        backgroundPlayback = false,
-        // mfplayer's PlayerSurface takes PlayerContentMode directly.
-        contentMode = true,
-        isoDirectPlay = true,
-        playbackPreferences = true,
-        engineSelection = true,
-    ),
-    bridge = ComposeOhosPlayerBridge(),
-)
+internal fun createOhosPlayerRuntime(): PlayerRuntime = createPlayerRuntime(ComposeOhosPlayerBridge())
 
 /**
  * HarmonyOS keeps only mfplayer's native video surface in ArkUI. All visible

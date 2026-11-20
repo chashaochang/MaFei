@@ -5,7 +5,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerSurfaceHandle
-import cn.mafei.cmp.player.runtime_macos.*
+import cn.mafei.cmp.player.runtime.createPlayerRuntime
+import cn.mafei.cmp.player.runtime_macos.MacSurfaceRegistry
+import cn.mafei.cmp.player.runtime_macos.MacVideoSurface
 import kotlinx.coroutines.*
 import java.awt.BorderLayout
 import java.awt.Canvas
@@ -15,7 +17,7 @@ import javax.swing.JPanel
 internal class MacPlayerHost {
     private val registry = MacSurfaceRegistry()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    fun runtime() = createMacOsPlayerRuntime(registry)
+    fun createRuntime() = createPlayerRuntime(registry)
 
     @Composable
     fun Surface(controller: PlayerController, modifier: Modifier) {

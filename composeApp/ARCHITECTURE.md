@@ -39,6 +39,10 @@
 `ApplicationPlaybackRegistry` 管理进程播放器，`RuntimePreferences` 管理偏好，
 `ApplicationLegacyMigration` 管理旧库导入，`ApplicationRuntime` 保留账号与会话装配。
 
+`:player:runtime` 是播放器原生接入的唯一 KMP 模块。`androidMain`、`desktopMain`、`iosMain`
+和 `ohosMain` 分别实现 `createPlayerRuntime`，用各自的桥接参数构造同一个 `PlayerRuntime` 接口。
+应用平台宿主仍负责原生 Surface、系统会话和窗口生命周期，共享播放层不依赖这些平台参数。
+
 ## 依赖与状态生命周期
 
 ```text

@@ -76,10 +76,7 @@ include(
     ":player:api",
     ":player:core",
     ":player:ui",
-    ":player:runtime-android",
-    ":player:runtime-ios",
-    ":player:runtime-ohos",
-    ":player:runtime-macos",
+    ":player:runtime",
     ":player:facade",
     ":player:testkit",
 

@@ -16,8 +16,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerRuntime
 import cn.mafei.cmp.player.api.PlayerSurfaceHandle
+import cn.mafei.cmp.player.runtime.createPlayerRuntime
 import cn.mafei.cmp.player.runtime_android.AndroidSurfaceRegistry
-import cn.mafei.cmp.player.runtime_android.createAndroidPlayerRuntime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,7 +38,10 @@ internal class AndroidPlayerHost private constructor(context: Context) {
     private val surfaces = AndroidSurfaceRegistry()
     private val surfaceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    fun createRuntime(): PlayerRuntime = AndroidMusicPlayback.wrap(applicationContext, createAndroidPlayerRuntime(applicationContext, surfaces))
+    fun createRuntime(): PlayerRuntime = AndroidMusicPlayback.wrap(
+        applicationContext,
+        createPlayerRuntime(applicationContext, surfaces),
+    )
 
     @Composable
     fun Surface(

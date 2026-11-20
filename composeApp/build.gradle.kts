@@ -67,7 +67,7 @@ kotlin {
         target.binaries.framework {
             baseName = "MaFeiShared"
             isStatic = true
-            export(project(":player:runtime-ios"))
+            export(project(":player:runtime"))
             export(project(":player:api"))
         }
     }
@@ -123,6 +123,7 @@ kotlin {
                 implementation(project(":common:media"))
                 implementation(project(":player:facade"))
                 implementation(project(":player:ui"))
+                api(project(":player:runtime"))
 
                 implementation(project(":feature:connect"))
                 implementation(project(":feature:home"))
@@ -167,7 +168,6 @@ kotlin {
             dependencies {
                 implementation(libs.androidx.activity.compose)
                 implementation("androidx.webkit:webkit:1.14.0")
-                implementation(project(":player:runtime-android"))
                 implementation(project(":platform:secure-storage-android"))
             }
         }
@@ -202,7 +202,6 @@ kotlin {
                 // Swing's JVM-only 1.10.2 provider is binary-compatible with the CPF core;
                 // do not let its transitive graph replace our frozen multiplatform core.
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2") { isTransitive = false }
-                implementation(project(":player:runtime-macos"))
                 implementation(project(":platform:secure-storage-macos"))
             }
         }
@@ -219,7 +218,6 @@ kotlin {
         val iosMain by creating {
             dependsOn(cpfUiMain)
             dependencies {
-                api(project(":player:runtime-ios"))
                 api(project(":player:api"))
                 implementation(project(":platform:secure-storage-ios"))
             }
@@ -245,7 +243,6 @@ kotlin {
             kotlin.srcDir(generateOhosContentReportConfiguration)
             dependencies {
                 api(libs.compose.export)
-                implementation(project(":player:runtime-ohos"))
                 implementation(project(":platform:secure-storage-ohos"))
                 implementation(project(":platform:secure-storage-core"))
             }
