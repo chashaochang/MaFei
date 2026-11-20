@@ -16,5 +16,5 @@ fun createPlayerRuntime(bridge: OhosNativePlayerBridge): PlayerRuntime = OhosPla
         playbackPreferences = true,
         engineSelection = true,
     ),
-    bridge = bridge,
+    bridge = platformOhosBridge(bridge),
 )

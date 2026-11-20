@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 
 class OhosPlayerRuntimeTest {
 
-    private class FakeBridge : OhosNativePlayerBridge {
+    private class FakeBridge(override val newHandlePerLoad: Boolean = false) : OhosNativePlayerBridge {
         var sink: ((OhosNativePlayerEvent) -> Unit)? = null
         var created = 0
         var handle = 0L
@@ -159,6 +159,24 @@ class OhosPlayerRuntimeTest {
         oldSink?.invoke(OhosNativePlayerEvent.Playing(oldHandle))
 
         assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun replacedSdkLoadRejectsDelayedNativeEventsFromOldHandle() {
+        val bridge = FakeBridge(newHandlePerLoad = true)
+        val runtime = OhosPlayerRuntime(PlayerCapabilities(), bridge)
+        val events = mutableListOf<RuntimeEvent>()
+        runtime.bind(events::add)
+        val resource = PlayableResource("video", "https://test/video")
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), resource))
+        val firstHandle = bridge.handle
+        val current = PlaybackGeneration()
+        runtime.execute(RuntimeCommand.Load(current, resource))
+
+        bridge.sink?.invoke(OhosNativePlayerEvent.Ready(firstHandle, 30_000))
+        bridge.sink?.invoke(OhosNativePlayerEvent.Ready(bridge.handle, 60_000))
+
+        assertEquals(listOf(RuntimeEvent.Ready(current, 60_000)), events.filterIsInstance<RuntimeEvent.Ready>())
     }
 
     @Test

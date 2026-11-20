@@ -12,6 +12,9 @@ kotlin.sourceSets.named("androidMain") {
 kotlin.sourceSets.named("desktopMain") {
     kotlin.srcDir(if (useCmpPlayer) "src/desktopMfplayerMain/kotlin" else "src/desktopSystemMain/kotlin")
 }
+kotlin.sourceSets.named("ohosMain") {
+    kotlin.srcDir(if (useCmpPlayer) "src/ohosMfplayerMain/kotlin" else "src/ohosSystemMain/kotlin")
+}
 
 // Keep the public checkout buildable without access to the private SDK.
 if (useCmpPlayer) {
@@ -52,6 +55,9 @@ if (useCmpPlayer) {
                     implementation(libs.compose.foundation)
                     implementation(libs.compose.material3)
                 }
+            }
+            named("ohosMain") {
+                dependencies { implementation("org.mfplayer.cmp:player-ohos:0.1.0-rc.1-cpf.1.3.0") }
             }
             named("desktopTest") {
                 kotlin.srcDir("src/mfplayerTest/kotlin")

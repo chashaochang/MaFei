@@ -54,12 +54,14 @@ Gradle 不从 `mavenLocal()` 解析播放器组件。
 ./gradlew -PmafeiCmpPlayer=true :composeApp:assembleDebug
 ./gradlew -PmafeiCmpPlayer=true :composeApp:run
 ./gradlew -PmafeiCmpPlayer=true :player:runtime:desktopTest --tests '*MfPlayerRuntimeTest'
+./gradlew -PmafeiCmpPlayer=true :composeApp:publishDebugBinariesToHarmonyApp
 ```
 
-此开关用于开发联调：Android 视频及音频、macOS 视频使用 SDK，macOS 音频
-暂用系统播放器。iOS 与鸿蒙目前只编译了共享适配代码，宿主未切换。
-不开开关时使用既有路径，公开 CI 不需要私有包。macOS `run` 从当前工作区
-加载联调包，尚不用于分发安装包。
+iOS 的 Xcode Debug 构建可通过环境变量 `ORG_GRADLE_PROJECT_mafeiCmpPlayer=true`
+打开同一开关。Android 和 iOS 的视频及音频、macOS 视频使用 CMP SDK，macOS
+音频仍使用系统播放器。鸿蒙使用 CMP SDK 的命令与事件桥接，ArkTS 仍负责解码
+Surface、系统 AVPlayer 选择与回退、画中画和投屏，打包还需要现有 MFPlayer HAR。
+联调开关默认关闭；macOS `run` 从工作区加载原生库，尚不用于分发安装包。
 
 ## 依赖与状态生命周期
 

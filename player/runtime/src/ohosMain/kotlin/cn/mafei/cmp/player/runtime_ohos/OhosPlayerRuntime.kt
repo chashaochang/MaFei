@@ -69,6 +69,7 @@ sealed interface OhosNativePlayerEvent {
  * 250 ms command/state round-trip is used.
  */
 interface OhosNativePlayerBridge {
+    val newHandlePerLoad: Boolean get() = false
     fun bind(eventSink: (OhosNativePlayerEvent) -> Unit)
     fun create(): Long
     fun loadUrl(
@@ -174,8 +175,10 @@ class OhosPlayerRuntime(
 
     private fun load(command: RuntimeCommand.Load) {
         val previous = state.value
-        val handle = if (previous.handle == 0L) bridge.create() else previous.handle
+        // A stop may synchronously report the outgoing source; never associate it with the new load.
+        state.value = RuntimeSnapshot(handle = previous.handle)
         if (previous.handle != 0L) bridge.stop(previous.handle)
+        val handle = if (previous.handle == 0L || bridge.newHandlePerLoad) bridge.create() else previous.handle
         state.value = RuntimeSnapshot(handle = handle, generation = command.generation)
         try {
             val decision = PlayerEngineResolver.resolve(playbackPreferences.engine, command.resource.engineFacts, capabilities.engineSelection)
