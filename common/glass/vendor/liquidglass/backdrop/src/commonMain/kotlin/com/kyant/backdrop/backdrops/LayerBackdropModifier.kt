@@ -10,6 +10,7 @@ import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.platform.InspectorInfo
 import com.kyant.backdrop.internal.recordLayer
+import com.kyant.backdrop.isRenderEffectSupported
 
 fun Modifier.layerBackdrop(backdrop: LayerBackdrop): Modifier =
     this then LayerBackdropElement(backdrop)
@@ -54,6 +55,11 @@ private class LayerBackdropNode(
 ) : DrawModifierNode, GlobalPositionAwareModifierNode, Modifier.Node() {
 
     override fun ContentDrawScope.draw() {
+        if (!isRenderEffectSupported()) {
+            // The opaque fallback has no consumers; keep page content on the live canvas.
+            drawContent()
+            return
+        }
         if (backdrop.recordsContentOnly) {
             // Reuse the live display list for both the page and its consumers.
             // Drawing content separately doubles traversal at every nested recorder.
