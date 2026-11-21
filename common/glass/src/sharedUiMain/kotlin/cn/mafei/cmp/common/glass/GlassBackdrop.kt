@@ -2,35 +2,38 @@ package cn.mafei.cmp.common.glass
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.backdrops.LayerBackdrop
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.drawPlainBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.isRenderEffectSupported
-import com.kyant.shapes.Capsule
+import androidx.compose.ui.unit.toIntSize
 
-/** Opaque product handle: vendor graphics layers never cross the glass boundary. */
+/** Opaque handle for sampling one or more background siblings. */
 @Stable
 class GlassBackdrop internal constructor(
-    internal val layer: Backdrop,
-    internal val captureLayer: LayerBackdrop?,
+    internal val layer: BackdropSample,
+    internal val captureLayer: BackdropCapture?,
 )
 
 private val GaussianRadius = 16.dp
@@ -38,56 +41,79 @@ internal fun frostedAlpha(requested: Float): Float = requested.coerceIn(.42f, 1f
 
 /** Blurs the sampled background, never the foreground content. */
 internal fun Modifier.drawFrostedBackdrop(
-    backdrop: Backdrop,
+    backdrop: BackdropSample,
     shape: () -> Shape,
     layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
-    exportedBackdrop: LayerBackdrop? = null,
+    exportedBackdrop: BackdropCapture? = null,
     fallbackTint: Color? = null,
     onDrawBackdrop: DrawScope.(drawBackdrop: DrawScope.() -> Unit) -> Unit = { drawBackdrop -> drawBackdrop() },
     onDrawSurface: (DrawScope.() -> Unit)? = null,
 ): Modifier = composed {
     val health = LocalGlassRenderHealth.current ?: rememberGlassRenderHealth()
-    val supported = isRenderEffectSupported()
-    val canBlur = supported && !health.effectFailed
+    val supported = supportsFrostedSampling() && !health.effectFailed
     val surface = MaterialTheme.colorScheme.surface
-    val base = if (supported) Modifier else Modifier.clip(shape())
-    base.drawPlainBackdrop(
-        backdrop = backdrop,
-        shape = shape,
-        effects = {
-            if (canBlur && !health.guard.run { blur(GaussianRadius.toPx()) }) {
-                renderEffect = null
-                padding = 0f
+    val sampledLayer = if (supported) rememberGraphicsLayer() else null
+    val placement = remember { MaterialPlacement() }
+    DisposableEffect(exportedBackdrop) {
+        onDispose { exportedBackdrop?.coordinates = null }
+    }
+    val transform = if (supported && layerBlock != null) Modifier.graphicsLayer(layerBlock) else Modifier
+    transform.clip(shape())
+        .onPlaced {
+            placement.coordinates = it
+            exportedBackdrop?.coordinates = it
+        }
+        .drawWithCache {
+            val radius = GaussianRadius.toPx()
+            if (sampledLayer != null) {
+                health.guard.run {
+                    sampledLayer.renderEffect = BlurEffect(radius, radius, TileMode.Clamp)
+                }
             }
-        },
-        layerBlock = layerBlock,
-        exportedBackdrop = exportedBackdrop,
-        onDrawBackdrop = { sample ->
-            if (canBlur && !health.effectFailed) onDrawBackdrop(sample)
-        },
-        onDrawSurface = {
-            if (!canBlur || health.effectFailed) {
-                drawRect((fallbackTint ?: surface).copy(alpha = 1f))
+            val materialDensity = Density(density, fontScale)
+            onDrawWithContent {
+                val target = placement.coordinates
+                val sampled = sampledLayer != null && !health.effectFailed &&
+                    target != null && backdrop.available(target)
+                if (sampledLayer != null && target != null && sampled) {
+                    sampledLayer.record(materialDensity, layoutDirection, size.toIntSize()) {
+                        onDrawBackdrop { backdrop.draw(this, target) }
+                    }
+                }
+                fun DrawScope.material() {
+                    if (sampled) drawLayer(sampledLayer)
+                    else drawRect((fallbackTint ?: surface).copy(alpha = 1f))
+                    if (onDrawSurface == null) drawRect(surface.copy(alpha = frostedAlpha(0f)))
+                    else onDrawSurface()
+                }
+                val export = exportedBackdrop?.layer
+                if (export != null && supported) {
+                    export.record(materialDensity, layoutDirection, size.toIntSize()) { material() }
+                    drawLayer(export)
+                } else {
+                    material()
+                }
+                drawContent()
             }
-            if (onDrawSurface != null) onDrawSurface()
-            else drawRect(surface.copy(alpha = frostedAlpha(0f)))
-        },
-    )
+        }
+}
+
+private class MaterialPlacement {
+    var coordinates: LayoutCoordinates? = null
 }
 
 @Composable
 fun rememberGlassBackdrop(onDraw: (ContentDrawScope.() -> Unit)? = null): GlassBackdrop {
-    val layer = if (onDraw == null) rememberLayerBackdrop() else rememberLayerBackdrop(onDraw = onDraw)
+    val layer = rememberBackdropCapture(onDraw)
     return remember(layer) { GlassBackdrop(layer, layer) }
 }
 
 /** Capture background siblings only; never record a consumer into its own source. */
 fun Modifier.captureGlassBackdrop(backdrop: GlassBackdrop): Modifier =
-    layerBackdrop(requireNotNull(backdrop.captureLayer) { "A combined glass backdrop cannot be used as a recorder" })
+    captureBackdrop(requireNotNull(backdrop.captureLayer) { "A combined glass backdrop cannot be used as a recorder" })
 
 /**
- * Shared frosted navigation track. The vendor backdrop remains inside
- * common:glass; UI shells only provide the page backdrop, tint and optional
+ * Shared frosted navigation track. UI shells provide the page backdrop, tint and optional
  * pressed transform. The caller can put [captureGlassBackdrop] before this
  * modifier on a sibling row to record the track for a selection droplet.
  */
@@ -97,7 +123,7 @@ fun Modifier.liquidTrackSurface(
     layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
 ): Modifier = drawFrostedBackdrop(
     backdrop = backdrop.layer,
-    shape = { Capsule() },
+    shape = { CircleShape },
     layerBlock = layerBlock,
     fallbackTint = tint,
     onDrawSurface = { drawRect(tint.copy(alpha = frostedAlpha(tint.alpha))) },
@@ -114,7 +140,7 @@ fun Modifier.liquidTrackSurface(
  */
 @Composable
 fun rememberCombinedGlassBackdrop(vararg backdrops: GlassBackdrop): GlassBackdrop {
-    val combined = rememberCombinedBackdrop(*backdrops.map { it.layer }.toTypedArray())
+    val combined = rememberCombinedSamples(*backdrops.map { it.layer }.toTypedArray())
     return remember(combined) { GlassBackdrop(combined, captureLayer = null) }
 }
 
@@ -123,8 +149,8 @@ fun rememberCombinedGlassBackdrop(vararg backdrops: GlassBackdrop): GlassBackdro
 fun currentGlassCapability(): GlassCapability {
     val failed = LocalGlassRenderHealth.current?.effectFailed == true
     return GlassCapability(
-        backdrop = true,
-        blur = !failed && isRenderEffectSupported(),
+        backdrop = supportsFrostedSampling(),
+        blur = !failed && supportsFrostedSampling(),
     )
 }
 

@@ -17,7 +17,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.drawFrostedBackdrop
-import com.kyant.shapes.Capsule
+import androidx.compose.foundation.shape.CircleShape
 
 /** Optical surface ported from AndroidLiquidGlass' verified MiniBar sample. */
 @Composable
@@ -33,12 +33,12 @@ fun LiquidMiniBarSurface(
         modifier
             .drawFrostedBackdrop(
                 backdrop = backdrop.layer,
-                shape = { Capsule() },
+                shape = { CircleShape },
                 onDrawSurface = {
                     drawRect(Color.White.copy(alpha = .2f))
                 },
             )
-            .clip(Capsule())
+            .clip(CircleShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

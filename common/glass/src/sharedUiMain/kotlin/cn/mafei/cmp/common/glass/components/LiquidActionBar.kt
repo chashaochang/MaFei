@@ -20,8 +20,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import cn.mafei.cmp.common.glass.rememberCombinedSamples
+import cn.mafei.cmp.common.glass.rememberBackdropCapture
 import kotlin.math.max
 
 /**
@@ -70,8 +70,8 @@ fun LiquidActionBar(
     // content remains visible through the material; the tint follows the page
     // theme instead of introducing a separate gray strip.
     val tintColor = if (isLightTheme) Color.White else MaterialTheme.colorScheme.background
-    val progressiveBackdrop = rememberLayerBackdrop()
-    val combinedBackdrop = rememberCombinedBackdrop(backdrop.layer, progressiveBackdrop)
+    val progressiveBackdrop = rememberBackdropCapture()
+    val combinedBackdrop = rememberCombinedSamples(backdrop.layer, progressiveBackdrop)
     // A page may omit the full-width bar material while keeping each control
     // as an independent liquid-glass button. In that case, sample the page
     // directly instead of combining it with the intentionally empty bar layer.

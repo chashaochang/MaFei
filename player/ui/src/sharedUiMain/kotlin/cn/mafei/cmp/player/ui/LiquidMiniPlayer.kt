@@ -47,8 +47,8 @@ import androidx.compose.ui.util.fastCoerceIn
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidMiniBarSurface
 import cn.mafei.cmp.common.ui.mafeiInteractive
-import com.kyant.shapes.Capsule
-import com.kyant.shapes.RoundedRectangle
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlin.math.min
 
 /**
@@ -110,7 +110,7 @@ fun LiquidMiniPlayer(
                 .height(58.dp),
         ) {
             Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(albumArtSize).clip(RoundedRectangle(14.dp))) {
+                Box(Modifier.size(albumArtSize).clip(RoundedCornerShape(14.dp))) {
                     artwork(Modifier.fillMaxSize())
                 }
                 Column(
@@ -135,7 +135,7 @@ fun LiquidMiniPlayer(
                     Modifier
                         .fillMaxHeight()
                         .width(42.dp)
-                        .clip(Capsule())
+                        .clip(CircleShape)
                         .mafeiInteractive(
                             onClick = onTogglePlay,
                             enabled = !presentation.isBusy || presentation.isPlaying,
@@ -157,7 +157,7 @@ fun LiquidMiniPlayer(
                     .padding(horizontal = 12.dp)
                     .fillMaxWidth()
                     .height(2.dp)
-                    .clip(Capsule())
+                    .clip(CircleShape)
                     .semantics {
                         contentDescription = presentation.status
                         progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo(

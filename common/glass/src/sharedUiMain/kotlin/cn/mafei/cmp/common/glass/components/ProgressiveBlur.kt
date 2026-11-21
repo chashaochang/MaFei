@@ -12,8 +12,8 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.withSaveLayer
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.drawFrostedBackdrop
-import com.kyant.backdrop.backdrops.LayerBackdrop
-import com.kyant.backdrop.backdrops.layerBackdrop
+import cn.mafei.cmp.common.glass.BackdropCapture
+import cn.mafei.cmp.common.glass.captureBackdrop
 
 /** Apply the fade after the blur, on a material-only sibling of the toolbar content. */
 internal fun Modifier.progressiveBlur(
@@ -22,10 +22,10 @@ internal fun Modifier.progressiveBlur(
     tintIntensity: Float,
     gradientStartFraction: Float,
     opacity: Float,
-    exportedBackdrop: LayerBackdrop? = null,
+    exportedBackdrop: BackdropCapture? = null,
 ): Modifier {
     if (opacity <= 0f) return this
-    return then(if (exportedBackdrop == null) Modifier else Modifier.layerBackdrop(exportedBackdrop))
+    return then(if (exportedBackdrop == null) Modifier else Modifier.captureBackdrop(exportedBackdrop))
         .drawWithCache {
             val opaque = Color.Black.copy(alpha = opacity.coerceAtMost(1f))
             val fade = Brush.verticalGradient(

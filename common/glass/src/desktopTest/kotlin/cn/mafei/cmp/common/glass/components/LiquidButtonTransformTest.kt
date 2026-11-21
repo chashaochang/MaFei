@@ -2,7 +2,7 @@ package cn.mafei.cmp.common.glass.components
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import com.kyant.backdrop.internal.InverseLayerScope
+import androidx.compose.ui.graphics.GraphicsLayerScope
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -12,9 +12,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class LiquidButtonTransformTest {
+    private class TestScope(override val size: Size) : GraphicsLayerScope by GraphicsLayerScope()
+
     @Test
     fun idleButtonResetsThePressedTransform() {
-        val scope = InverseLayerScope().apply { size = Size(120f, 48f) }
+        val scope = TestScope(Size(120f, 48f))
         scope.applyLiquidButtonPressTransform(.6f, Offset(12f, -8f))
         scope.applyLiquidButtonPressTransform(0f, Offset.Zero)
         assertEquals(0f, scope.translationX)
@@ -25,7 +27,7 @@ class LiquidButtonTransformTest {
 
     @Test
     fun idleButtonBeforeMeasurementHasNoInvalidTransform() {
-        val scope = InverseLayerScope().apply { size = Size.Zero }
+        val scope = TestScope(Size.Zero)
         scope.applyLiquidButtonPressTransform(0f, Offset.Zero)
         assertEquals(0f, scope.translationX)
         assertEquals(0f, scope.translationY)
@@ -38,11 +40,11 @@ class LiquidButtonTransformTest {
         for (size in listOf(Size(120f, 48f), Size(48f, 120f))) {
             for (progress in listOf(0f, .5f, 1f)) {
                 for (offset in listOf(Offset.Zero, Offset(12f, -8f))) {
-                    val scope = InverseLayerScope().apply { this.size = size; density = 2f }
+                    val scope = TestScope(size)
                     scope.applyLiquidButtonPressTransform(progress, offset)
-                    val scale = 1f + (8f / size.height) * progress
+                    val scale = 1f + (4f / size.height) * progress
                     val maxOffset = size.minDimension
-                    val maxDragScale = 8f / size.height
+                    val maxDragScale = 4f / size.height
                     val angle = atan2(offset.y, offset.x)
                     assertEquals(maxOffset * tanh(.05f * offset.x / maxOffset), scope.translationX, .000001f)
                     assertEquals(maxOffset * tanh(.05f * offset.y / maxOffset), scope.translationY, .000001f)

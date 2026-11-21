@@ -35,12 +35,12 @@ import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.utils.DampedDragAnimation
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberBackdrop
-import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import cn.mafei.cmp.common.glass.captureBackdrop
+import cn.mafei.cmp.common.glass.rememberTransformedSample
+import cn.mafei.cmp.common.glass.rememberCombinedSamples
+import cn.mafei.cmp.common.glass.rememberBackdropCapture
 import cn.mafei.cmp.common.glass.drawFrostedBackdrop
-import com.kyant.shapes.Capsule
+import androidx.compose.foundation.shape.CircleShape
 import kotlinx.coroutines.flow.collectLatest
 
 @Composable
@@ -64,7 +64,7 @@ fun LiquidSlider(
         if (isLightTheme) Color(0xFF787878).copy(0.2f)
         else Color(0xFF787880).copy(0.36f)
 
-    val trackBackdrop = rememberLayerBackdrop()
+    val trackBackdrop = rememberBackdropCapture()
 
     BoxWithConstraints(
         modifier.fillMaxWidth(),
@@ -115,10 +115,10 @@ fun LiquidSlider(
                 }
         }
 
-        Box(Modifier.layerBackdrop(trackBackdrop)) {
+        Box(Modifier.captureBackdrop(trackBackdrop)) {
             Box(
                 Modifier
-                    .clip(Capsule())
+                    .clip(CircleShape)
                     .background(trackColor)
                     .pointerInput(dampedDragAnimation) {
                         detectTapGestures { position ->
@@ -138,7 +138,7 @@ fun LiquidSlider(
 
             Box(
                 Modifier
-                    .clip(Capsule())
+                    .clip(CircleShape)
                     .background(accentColor)
                     .height(6f.dp)
                     .layout { measurable, constraints ->
@@ -160,9 +160,9 @@ fun LiquidSlider(
                 }
                 .then(dampedDragAnimation.modifier)
                 .drawFrostedBackdrop(
-                    backdrop = rememberCombinedBackdrop(
+                    backdrop = rememberCombinedSamples(
                         backdrop.layer,
-                        rememberBackdrop(trackBackdrop) { drawBackdrop ->
+                        rememberTransformedSample(trackBackdrop) { drawBackdrop ->
                             val progress = dampedDragAnimation.pressProgress
                             val scaleX = lerp(2f / 3f, 1f, progress)
                             val scaleY = lerp(0f, 1f, progress)
@@ -171,7 +171,7 @@ fun LiquidSlider(
                             }
                         }
                     ),
-                    shape = { Capsule() },
+                    shape = { CircleShape },
                     layerBlock = {
                         scaleX = dampedDragAnimation.scaleX
                         scaleY = dampedDragAnimation.scaleY

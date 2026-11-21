@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.utils.DampedDragAnimation
 import cn.mafei.cmp.common.glass.drawFrostedBackdrop
-import com.kyant.shapes.Capsule
+import androidx.compose.foundation.shape.CircleShape
 
 /** Animated selection surface; place below the visible labels. */
 @Composable
@@ -39,7 +39,7 @@ fun LiquidSelectionDroplet(
             }
             .drawFrostedBackdrop(
                 backdrop = backdrop.layer,
-                shape = { Capsule() },
+                shape = { CircleShape },
                 // Scale must be applied through drawBackdrop's layerBlock,
                 // block to inverse-transform the sampled source; applying it
                 // and visibly pushes text toward the lower-right corner.

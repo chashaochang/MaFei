@@ -29,9 +29,7 @@ data class GlassSurfaceSpec(
 /**
  * Stable MaFei-facing glass contract.
  *
- * CMPLiquidGlass types stay behind this module and must never leak into a
- * feature module. Missing capture or unsupported blur resolves to an opaque
- * surface.
+ * Missing capture or unsupported blur resolves to an opaque surface.
  */
 interface GlassCapabilityProvider {
     val capability: GlassCapability

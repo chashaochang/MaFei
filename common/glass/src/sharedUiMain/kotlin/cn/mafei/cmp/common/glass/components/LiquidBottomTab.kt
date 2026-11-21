@@ -22,7 +22,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.kyant.shapes.Capsule
+import androidx.compose.foundation.shape.CircleShape
 
 internal val LocalLiquidBottomTabScale =
     staticCompositionLocalOf { { 1f } }
@@ -42,7 +42,7 @@ fun RowScope.LiquidBottomTab(
     val hovered by interactionSource.collectIsHoveredAsState()
     Column(
         modifier
-            .clip(Capsule())
+            .clip(CircleShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

@@ -36,7 +36,7 @@ import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
 import cn.mafei.cmp.common.glass.drawFrostedBackdrop
 import cn.mafei.cmp.common.glass.frostedAlpha
-import com.kyant.shapes.Capsule
+import androidx.compose.foundation.shape.CircleShape
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -81,7 +81,7 @@ fun LiquidButton(
         modifier
             .drawFrostedBackdrop(
                 backdrop = backdrop.layer,
-                shape = { Capsule() },
+                shape = { CircleShape },
                 layerBlock = if (pressEffectActive) {
                     {
                         applyLiquidButtonPressTransform(

@@ -34,8 +34,8 @@ import cn.mafei.cmp.common.glass.currentGlassCapability
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
 import cn.mafei.cmp.common.glass.drawFrostedBackdrop
 import cn.mafei.cmp.common.glass.frostedAlpha
-import com.kyant.shapes.Capsule
-import com.kyant.shapes.RoundedRectangle
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /**
  * Port of the upstream catalog's dialog panel
@@ -71,11 +71,11 @@ fun LiquidAlertDialog(
 ) {
     val canSample = backdrop != null && currentGlassCapability().blur
     val material = if (!canSample) {
-        Modifier.clip(RoundedRectangle(32.dp)).background(containerColor.copy(alpha = 1f))
+        Modifier.clip(RoundedCornerShape(32.dp)).background(containerColor.copy(alpha = 1f))
     } else {
         Modifier.drawFrostedBackdrop(
             backdrop = requireNotNull(backdrop).layer,
-            shape = { RoundedRectangle(32.dp) },
+            shape = { RoundedCornerShape(32.dp) },
             fallbackTint = containerColor,
             onDrawSurface = { drawRect(containerColor.copy(alpha = frostedAlpha(containerColor.alpha))) },
         )
@@ -151,7 +151,7 @@ private fun AlertAction(
     Row(
         modifier
             .graphicsLayer { alpha = if (enabled) 1f else .5f }
-            .clip(Capsule())
+            .clip(CircleShape)
             .background(background)
             .clickable(
                 enabled = enabled,

@@ -42,7 +42,7 @@ import cn.mafei.cmp.common.glass.utils.DampedDragAnimation
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
 import cn.mafei.cmp.common.glass.drawFrostedBackdrop
 import cn.mafei.cmp.common.glass.frostedAlpha
-import com.kyant.shapes.Capsule
+import androidx.compose.foundation.shape.CircleShape
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.drop
@@ -206,7 +206,7 @@ fun LiquidBottomTabs(
                     }
                     .drawFrostedBackdrop(
                         backdrop = vendorBackdrop,
-                        shape = { if (docked) RoundedCornerShape(0.dp) else Capsule() },
+                        shape = { if (docked) RoundedCornerShape(0.dp) else CircleShape },
                         layerBlock = {
                             val progress = dampedDragAnimation.pressProgress
                             val scale = if (docked) 1f else if (style == LiquidBottomTabsStyle.Compact) {
@@ -242,7 +242,7 @@ fun LiquidBottomTabs(
                         alpha = 1f - (collapseProgress * 2f).fastCoerceIn(0f, 1f)
                     }
                     .graphicsLayer {
-                        shape = Capsule()
+                        shape = CircleShape
                         clip = true
                         val velocity = dampedDragAnimation.velocity / 10f
                         scaleX = dampedDragAnimation.scaleX

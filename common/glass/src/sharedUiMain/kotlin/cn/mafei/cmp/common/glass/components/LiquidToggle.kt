@@ -36,12 +36,12 @@ import androidx.compose.ui.util.lerp
 import androidx.compose.material3.MaterialTheme
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.utils.DampedDragAnimation
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberBackdrop
-import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import cn.mafei.cmp.common.glass.captureBackdrop
+import cn.mafei.cmp.common.glass.rememberTransformedSample
+import cn.mafei.cmp.common.glass.rememberCombinedSamples
+import cn.mafei.cmp.common.glass.rememberBackdropCapture
 import cn.mafei.cmp.common.glass.drawFrostedBackdrop
-import com.kyant.shapes.Capsule
+import androidx.compose.foundation.shape.CircleShape
 import kotlinx.coroutines.flow.collectLatest
 
 object LiquidToggleDefaults {
@@ -130,7 +130,7 @@ fun LiquidToggle(
         }
     }
 
-    val trackBackdrop = rememberLayerBackdrop()
+    val trackBackdrop = rememberBackdropCapture()
     Box(
         modifier.size(LiquidToggleDefaults.trackWidth, LiquidToggleDefaults.touchHeight)
             .semantics {
@@ -143,8 +143,8 @@ fun LiquidToggle(
     ) {
         Box(
             Modifier
-                .layerBackdrop(trackBackdrop)
-                .clip(Capsule())
+                .captureBackdrop(trackBackdrop)
+                .clip(CircleShape)
                 .drawBehind {
                     val value = dampedDragAnimation.value
                     drawRect(lerp(trackColor, accentColor, value))
@@ -164,9 +164,9 @@ fun LiquidToggle(
                     }
                 }
                 .drawFrostedBackdrop(
-                    backdrop = rememberCombinedBackdrop(
+                    backdrop = rememberCombinedSamples(
                         backdrop.layer,
-                        rememberBackdrop(trackBackdrop) { drawBackdrop ->
+                        rememberTransformedSample(trackBackdrop) { drawBackdrop ->
                             val progress = dampedDragAnimation.pressProgress
                             scale(
                                 lerp(2f / 3f, .75f, progress),
@@ -174,7 +174,7 @@ fun LiquidToggle(
                             ) { drawBackdrop() }
                         },
                     ),
-                    shape = { Capsule() },
+                    shape = { CircleShape },
                     layerBlock = {
                         scaleX = dampedDragAnimation.scaleX
                         scaleY = dampedDragAnimation.scaleY
